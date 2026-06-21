@@ -16,6 +16,10 @@ last_mine_time = {}
 
 def register_jobs_handlers(dp):
     
+    # ==========================================
+    # ===== МЕНЮ РАБОТ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "works")
     async def works_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -44,6 +48,10 @@ def register_jobs_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== ВОДОЛАЗ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "work_diver")
     async def work_diver(callback: types.CallbackQuery):
         if not await check_access(callback):
@@ -77,6 +85,10 @@ def register_jobs_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== ШАХТА =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "mine")
     async def mine_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -224,288 +236,10 @@ def register_jobs_handlers(dp):
         
         await callback.answer()
 
-    @dp.callback_query(F.data == "work_trading")
-    async def work_trading(callback: types.CallbackQuery, state: FSMContext):
-        await state.clear()
-        if not await check_access(callback):
-            return
-        
-        if await is_function_disabled("job_3"):
-            await callback.answer("⛔ Эта работа остановлена администратором!", show_alert=True)
-            return
-        
-        try:
-            currency_rates.update_rates()
-            users = await load_users()
-            user = users.get(str(callback.from_user.id), get_default_user())
-            
-            remaining = currency_rates.get_time_until_update()
-            minutes = remaining // 60
-            seconds = remaining % 60
-            
-            keyboard = [
-                [InlineKeyboardButton(
-                    text=f"BTC: {currency_rates.rates['BTC']['price']:,.0f}₽ (макс: 15)",
-                    callback_data="trade_BTC"
-                )],
-                [InlineKeyboardButton(
-                    text=f"WETcoin: {currency_rates.rates['WETcoin']['price']:,.0f}₽ (макс: 75)",
-                    callback_data="trade_WETcoin"
-                )],
-                [InlineKeyboardButton(
-                    text=f"NotCoin: {currency_rates.rates['NotCoin']['price']:,.0f}₽ (макс: 2500)",
-                    callback_data="trade_NotCoin"
-                )],
-                [InlineKeyboardButton(text="ℹ️ Инфо", callback_data="trading_info")],
-                [InlineKeyboardButton(text="🔙 Назад", callback_data="works")]
-            ]
-            
-            await callback.message.edit_text(
-                f"📈 Трейдинг\n\n"
-                f"💰 Баланс: {user['money']:,.0f}₽\n"
-                f"🪙 BRcoins: {user['brcoins']}\n\n"
-                f"₿ BTC: {user['portfolio'].get('BTC', 0)}/150\n"
-                f"💧 WETcoin: {user['portfolio'].get('WETcoin', 0)}/100\n"
-                f"🪙 NotCoin: {user['portfolio'].get('NotCoin', 0)}/5000\n\n"
-                f"⏳ Следующее обновление курсов: {minutes:02d}:{seconds:02d}",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-            )
-        except Exception as e:
-            logger.error(f"Ошибка в work_trading: {e}")
-            await callback.answer("⚠️ Ошибка!", show_alert=True)
-        
-        await callback.answer()
-
-    @dp.callback_query(F.data == "trading_info")
-    async def trading_info(callback: types.CallbackQuery):
-        if not await check_access(callback):
-            return
-        
-        try:
-            text = "ℹ️ Курсы валют:\n\n"
-            for currency, data in currency_rates.rates.items():
-                text += (
-                    f"**{currency}**\n"
-                    f"💰 {data['price']:,.0f}₽\n"
-                    f"📊 Средняя: {data['avg']:,.0f}₽\n"
-                    f"📈 Макс: {data['max']:,.0f}₽\n"
-                    f"📉 Мин: {data['min']:,.0f}₽\n\n"
-                )
-            
-            text += "📊 Лимиты:\n"
-            text += "BTC - макс. покупка/продажа: 15 шт., хранение: 150\n"
-            text += "WETcoin - макс. покупка/продажа: 75 шт., хранение: 100\n"
-            text += "NotCoin - макс. покупка/продажа: 2500 шт., хранение: 5000"
-            
-            await callback.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Назад", callback_data="work_trading")]
-                ]),
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            logger.error(f"Ошибка в trading_info: {e}")
-            await callback.answer("⚠️ Ошибка!", show_alert=True)
-        
-        await callback.answer()
-
-    @dp.callback_query(F.data.startswith("trade_"))
-    async def trade_currency(callback: types.CallbackQuery, state: FSMContext):
-        await state.clear()
-        if not await check_access(callback):
-            return
-        
-        try:
-            currency = callback.data.split("_")[1]
-            price = currency_rates.rates[currency]["price"]
-            
-            limits = {
-                "BTC": {"max_trade": 15, "max_storage": 150},
-                "WETcoin": {"max_trade": 75, "max_storage": 100},
-                "NotCoin": {"max_trade": 2500, "max_storage": 5000}
-            }
-            
-            await state.update_data(currency=currency, price=price, limit=limits[currency])
-            
-            keyboard = [
-                [InlineKeyboardButton(text="🛒 Купить", callback_data=f"buy_{currency}")],
-                [InlineKeyboardButton(text="🛍️ Продать", callback_data=f"sell_{currency}")],
-                [InlineKeyboardButton(text="🔙 Назад", callback_data="work_trading")]
-            ]
-            
-            await callback.message.edit_text(
-                f"📊 {currency}\n"
-                f"Цена: {price:,.0f}₽\n"
-                f"Макс. покупка/продажа: {limits[currency]['max_trade']}\n"
-                f"Макс. хранение: {limits[currency]['max_storage']}\n\n"
-                f"Выберите действие:",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-            )
-        except Exception as e:
-            logger.error(f"Ошибка в trade_currency: {e}")
-            await callback.answer("⚠️ Ошибка!", show_alert=True)
-        
-        await callback.answer()
-
-    @dp.callback_query(F.data.startswith("buy_") & ~F.data.startswith("buy_business_"))
-    async def buy_amount(callback: types.CallbackQuery, state: FSMContext):
-        if not await check_access(callback):
-            return
-        
-        try:
-            currency = callback.data.split("_")[1]
-            await state.update_data(action="buy", currency=currency)
-            await callback.message.edit_text(f"✏️ Напишите количество {currency} для покупки:")
-            await state.set_state("waiting_for_trade_amount")
-        except Exception as e:
-            logger.error(f"Ошибка в buy_amount: {e}")
-            await callback.answer("⚠️ Ошибка!", show_alert=True)
-        
-        await callback.answer()
-
-    @dp.callback_query(F.data.startswith("sell_") & ~F.data.startswith("sell_business_"))
-    async def sell_amount(callback: types.CallbackQuery, state: FSMContext):
-        if not await check_access(callback):
-            return
-        
-        try:
-            currency = callback.data.split("_")[1]
-            await state.update_data(action="sell", currency=currency)
-            await callback.message.edit_text(f"✏️ Напишите количество {currency} для продажи:")
-            await state.set_state("waiting_for_trade_amount")
-        except Exception as e:
-            logger.error(f"Ошибка в sell_amount: {e}")
-            await callback.answer("⚠️ Ошибка!", show_alert=True)
-        
-        await callback.answer()
-
-    @dp.message(lambda msg: msg.text and not msg.text.startswith('/'))
-    async def process_trade_amount(message: types.Message, state: FSMContext):
-        current_state = await state.get_state()
-        if current_state != "waiting_for_trade_amount":
-            return
-        
-        if not await check_access(message):
-            await state.clear()
-            return
-        
-        try:
-            amount = int(message.text)
-            if amount <= 0:
-                await message.answer("❌ Введите положительное число!")
-                return
-            
-            data = await state.get_data()
-            currency = data.get("currency")
-            action = data.get("action")
-            price = data.get("price")
-            limit = data.get("limit", {"max_trade": 15, "max_storage": 150})
-            
-            if not currency or not action:
-                await message.answer("❌ Ошибка сессии. Начните заново.")
-                await state.clear()
-                return
-            
-            if amount > limit["max_trade"]:
-                await message.answer(f"❌ Максимум можно {action} {limit['max_trade']} {currency}")
-                return
-            
-            user_id = str(message.from_user.id)
-            users = await load_users()
-            user = users.get(user_id, get_default_user())
-            
-            if action == "buy":
-                total = amount * price
-                if user["money"] < total:
-                    await message.answer(f"❌ Недостаточно средств! Нужно {total:,.0f}₽")
-                    await state.clear()
-                    return
-                
-                current = user["portfolio"].get(currency, 0)
-                if current + amount > limit["max_storage"]:
-                    await message.answer(
-                        f"❌ Превышен лимит хранения! Максимум {limit['max_storage']} {currency}. "
-                        f"Сейчас: {current}"
-                    )
-                    await state.clear()
-                    return
-                
-                user["money"] -= total
-                user["portfolio"][currency] = user["portfolio"].get(currency, 0) + amount
-                user["trades_count"] = user.get("trades_count", 0) + amount
-                
-                users[user_id] = user
-                await save_users(users)
-                
-                await message.answer(f"✅ Куплено {amount} {currency} за {total:,.0f}₽")
-            
-            elif action == "sell":
-                current = user["portfolio"].get(currency, 0)
-                if current < amount:
-                    await message.answer(
-                        f"❌ У вас только {current} {currency}"
-                    )
-                    await state.clear()
-                    return
-                
-                total = amount * price
-                user["money"] += total
-                user["portfolio"][currency] -= amount
-                user["trades_count"] = user.get("trades_count", 0) + amount
-                
-                users[user_id] = user
-                await save_users(users)
-                
-                await message.answer(f"✅ Продано {amount} {currency} за {total:,.0f}₽")
-            
-            await state.clear()
-            
-            # Возвращаем в меню трейдинга
-            currency_rates.update_rates()
-            users = await load_users()
-            user = users.get(user_id, get_default_user())
-            
-            remaining = currency_rates.get_time_until_update()
-            minutes = remaining // 60
-            seconds = remaining % 60
-            
-            keyboard = [
-                [InlineKeyboardButton(
-                    text=f"BTC: {currency_rates.rates['BTC']['price']:,.0f}₽ (макс: 15)",
-                    callback_data="trade_BTC"
-                )],
-                [InlineKeyboardButton(
-                    text=f"WETcoin: {currency_rates.rates['WETcoin']['price']:,.0f}₽ (макс: 75)",
-                    callback_data="trade_WETcoin"
-                )],
-                [InlineKeyboardButton(
-                    text=f"NotCoin: {currency_rates.rates['NotCoin']['price']:,.0f}₽ (макс: 2500)",
-                    callback_data="trade_NotCoin"
-                )],
-                [InlineKeyboardButton(text="ℹ️ Инфо", callback_data="trading_info")],
-                [InlineKeyboardButton(text="🔙 Назад", callback_data="works")]
-            ]
-            
-            await message.answer(
-                f"📈 Трейдинг\n\n"
-                f"💰 Баланс: {user['money']:,.0f}₽\n"
-                f"🪙 BRcoins: {user['brcoins']}\n\n"
-                f"₿ BTC: {user['portfolio'].get('BTC', 0)}/150\n"
-                f"💧 WETcoin: {user['portfolio'].get('WETcoin', 0)}/100\n"
-                f"🪙 NotCoin: {user['portfolio'].get('NotCoin', 0)}/5000\n\n"
-                f"⏳ Следующее обновление курсов: {minutes:02d}:{seconds:02d}",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-            )
-            
-        except ValueError:
-            await message.answer("❌ Введите число!")
-            await state.clear()
-        except Exception as e:
-            logger.error(f"Ошибка в process_trade_amount: {e}")
-            await message.answer("⚠️ Произошла ошибка!")
-            await state.clear()
-
+    # ==========================================
+    # ===== ФЕРМА =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "work_farmer")
     async def work_farmer_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -677,3 +411,294 @@ def register_jobs_handlers(dp):
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
+
+    # ==========================================
+    # ===== ТРЕЙДИНГ =====
+    # ==========================================
+    
+    @dp.callback_query(F.data == "work_trading")
+    async def work_trading(callback: types.CallbackQuery, state: FSMContext):
+        await state.clear()
+        if not await check_access(callback):
+            return
+        
+        if await is_function_disabled("job_3"):
+            await callback.answer("⛔ Эта работа остановлена администратором!", show_alert=True)
+            return
+        
+        try:
+            currency_rates.update_rates()
+            users = await load_users()
+            user = users.get(str(callback.from_user.id), get_default_user())
+            
+            remaining = currency_rates.get_time_until_update()
+            minutes = remaining // 60
+            seconds = remaining % 60
+            
+            keyboard = [
+                [InlineKeyboardButton(
+                    text=f"BTC: {currency_rates.rates['BTC']['price']:,.0f}₽ (макс: 15)",
+                    callback_data="trade_BTC"
+                )],
+                [InlineKeyboardButton(
+                    text=f"WETcoin: {currency_rates.rates['WETcoin']['price']:,.0f}₽ (макс: 75)",
+                    callback_data="trade_WETcoin"
+                )],
+                [InlineKeyboardButton(
+                    text=f"NotCoin: {currency_rates.rates['NotCoin']['price']:,.0f}₽ (макс: 2500)",
+                    callback_data="trade_NotCoin"
+                )],
+                [InlineKeyboardButton(text="ℹ️ Инфо", callback_data="trading_info")],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="works")]
+            ]
+            
+            await callback.message.edit_text(
+                f"📈 Трейдинг\n\n"
+                f"💰 Баланс: {user['money']:,.0f}₽\n"
+                f"🪙 BRcoins: {user['brcoins']}\n\n"
+                f"₿ BTC: {user['portfolio'].get('BTC', 0)}/150\n"
+                f"💧 WETcoin: {user['portfolio'].get('WETcoin', 0)}/100\n"
+                f"🪙 NotCoin: {user['portfolio'].get('NotCoin', 0)}/5000\n\n"
+                f"⏳ Следующее обновление курсов: {minutes:02d}:{seconds:02d}",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в work_trading: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data == "trading_info")
+    async def trading_info(callback: types.CallbackQuery):
+        if not await check_access(callback):
+            return
+        
+        try:
+            text = "ℹ️ Курсы валют:\n\n"
+            for currency, data in currency_rates.rates.items():
+                text += (
+                    f"**{currency}**\n"
+                    f"💰 {data['price']:,.0f}₽\n"
+                    f"📊 Средняя: {data['avg']:,.0f}₽\n"
+                    f"📈 Макс: {data['max']:,.0f}₽\n"
+                    f"📉 Мин: {data['min']:,.0f}₽\n\n"
+                )
+            
+            text += "📊 Лимиты:\n"
+            text += "BTC - макс. покупка/продажа: 15 шт., хранение: 150\n"
+            text += "WETcoin - макс. покупка/продажа: 75 шт., хранение: 100\n"
+            text += "NotCoin - макс. покупка/продажа: 2500 шт., хранение: 5000"
+            
+            await callback.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Назад", callback_data="work_trading")]
+                ]),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в trading_info: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data.startswith("trade_"))
+    async def trade_currency(callback: types.CallbackQuery, state: FSMContext):
+        await state.clear()
+        if not await check_access(callback):
+            return
+        
+        try:
+            currency = callback.data.split("_")[1]
+            price = currency_rates.rates[currency]["price"]
+            
+            limits = {
+                "BTC": {"max_trade": 15, "max_storage": 150},
+                "WETcoin": {"max_trade": 75, "max_storage": 100},
+                "NotCoin": {"max_trade": 2500, "max_storage": 5000}
+            }
+            
+            await state.update_data(currency=currency, price=price, limit=limits[currency])
+            
+            keyboard = [
+                [InlineKeyboardButton(text="🛒 Купить", callback_data=f"buy_{currency}")],
+                [InlineKeyboardButton(text="🛍️ Продать", callback_data=f"sell_{currency}")],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="work_trading")]
+            ]
+            
+            await callback.message.edit_text(
+                f"📊 {currency}\n"
+                f"Цена: {price:,.0f}₽\n"
+                f"Макс. покупка/продажа: {limits[currency]['max_trade']}\n"
+                f"Макс. хранение: {limits[currency]['max_storage']}\n\n"
+                f"Выберите действие:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в trade_currency: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data.startswith("buy_") & ~F.data.startswith("buy_business_"))
+    async def buy_amount(callback: types.CallbackQuery, state: FSMContext):
+        if not await check_access(callback):
+            return
+        
+        try:
+            currency = callback.data.split("_")[1]
+            await state.update_data(action="buy", currency=currency)
+            await callback.message.edit_text(f"✏️ Напишите количество {currency} для покупки:")
+            await state.set_state("waiting_for_trade_amount")
+        except Exception as e:
+            logger.error(f"Ошибка в buy_amount: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data.startswith("sell_") & ~F.data.startswith("sell_business_"))
+    async def sell_amount(callback: types.CallbackQuery, state: FSMContext):
+        if not await check_access(callback):
+            return
+        
+        try:
+            currency = callback.data.split("_")[1]
+            await state.update_data(action="sell", currency=currency)
+            await callback.message.edit_text(f"✏️ Напишите количество {currency} для продажи:")
+            await state.set_state("waiting_for_trade_amount")
+        except Exception as e:
+            logger.error(f"Ошибка в sell_amount: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    # ==========================================
+    # ===== ОБРАБОТЧИК ТРЕЙДИНГА =====
+    # ==========================================
+    
+    @dp.message(F.text, ~F.text.startswith('/'))
+    async def process_trade_amount(message: types.Message, state: FSMContext):
+        """Обработчик сумм для трейдинга"""
+        current_state = await state.get_state()
+        if current_state != "waiting_for_trade_amount":
+            return
+        
+        if not await check_access(message):
+            await state.clear()
+            return
+        
+        try:
+            amount = int(message.text)
+            if amount <= 0:
+                await message.answer("❌ Введите положительное число!")
+                return
+            
+            data = await state.get_data()
+            currency = data.get("currency")
+            action = data.get("action")
+            price = data.get("price")
+            limit = data.get("limit", {"max_trade": 15, "max_storage": 150})
+            
+            if not currency or not action:
+                await message.answer("❌ Ошибка сессии. Начните заново.")
+                await state.clear()
+                return
+            
+            if amount > limit["max_trade"]:
+                await message.answer(f"❌ Максимум можно {action} {limit['max_trade']} {currency}")
+                return
+            
+            user_id = str(message.from_user.id)
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            
+            if action == "buy":
+                total = amount * price
+                if user["money"] < total:
+                    await message.answer(f"❌ Недостаточно средств! Нужно {total:,.0f}₽")
+                    await state.clear()
+                    return
+                
+                current = user["portfolio"].get(currency, 0)
+                if current + amount > limit["max_storage"]:
+                    await message.answer(
+                        f"❌ Превышен лимит хранения! Максимум {limit['max_storage']} {currency}. "
+                        f"Сейчас: {current}"
+                    )
+                    await state.clear()
+                    return
+                
+                user["money"] -= total
+                user["portfolio"][currency] = user["portfolio"].get(currency, 0) + amount
+                user["trades_count"] = user.get("trades_count", 0) + amount
+                
+                users[user_id] = user
+                await save_users(users)
+                
+                await message.answer(f"✅ Куплено {amount} {currency} за {total:,.0f}₽")
+            
+            elif action == "sell":
+                current = user["portfolio"].get(currency, 0)
+                if current < amount:
+                    await message.answer(
+                        f"❌ У вас только {current} {currency}"
+                    )
+                    await state.clear()
+                    return
+                
+                total = amount * price
+                user["money"] += total
+                user["portfolio"][currency] -= amount
+                user["trades_count"] = user.get("trades_count", 0) + amount
+                
+                users[user_id] = user
+                await save_users(users)
+                
+                await message.answer(f"✅ Продано {amount} {currency} за {total:,.0f}₽")
+            
+            await state.clear()
+            
+            # Возвращаем в меню трейдинга
+            currency_rates.update_rates()
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            
+            remaining = currency_rates.get_time_until_update()
+            minutes = remaining // 60
+            seconds = remaining % 60
+            
+            keyboard = [
+                [InlineKeyboardButton(
+                    text=f"BTC: {currency_rates.rates['BTC']['price']:,.0f}₽ (макс: 15)",
+                    callback_data="trade_BTC"
+                )],
+                [InlineKeyboardButton(
+                    text=f"WETcoin: {currency_rates.rates['WETcoin']['price']:,.0f}₽ (макс: 75)",
+                    callback_data="trade_WETcoin"
+                )],
+                [InlineKeyboardButton(
+                    text=f"NotCoin: {currency_rates.rates['NotCoin']['price']:,.0f}₽ (макс: 2500)",
+                    callback_data="trade_NotCoin"
+                )],
+                [InlineKeyboardButton(text="ℹ️ Инфо", callback_data="trading_info")],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="works")]
+            ]
+            
+            await message.answer(
+                f"📈 Трейдинг\n\n"
+                f"💰 Баланс: {user['money']:,.0f}₽\n"
+                f"🪙 BRcoins: {user['brcoins']}\n\n"
+                f"₿ BTC: {user['portfolio'].get('BTC', 0)}/150\n"
+                f"💧 WETcoin: {user['portfolio'].get('WETcoin', 0)}/100\n"
+                f"🪙 NotCoin: {user['portfolio'].get('NotCoin', 0)}/5000\n\n"
+                f"⏳ Следующее обновление курсов: {minutes:02d}:{seconds:02d}",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+            )
+            
+        except ValueError:
+            await message.answer("❌ Введите число!")
+            await state.clear()
+        except Exception as e:
+            logger.error(f"Ошибка в process_trade_amount: {e}")
+            await message.answer("⚠️ Произошла ошибка!")
+            await state.clear()
