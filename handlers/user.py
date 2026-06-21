@@ -539,9 +539,289 @@ def register_user_handlers(dp):
         
         await callback.answer()
 
+    @dp.callback_query(F.data == "buyer")
+    async def buyer_menu(callback: types.CallbackQuery, state: FSMContext):
+        await state.clear()
+        if not await check_access(callback):
+            return
+        
+        if await is_function_disabled("menubutton_6"):
+            await callback.answer("⛔ Эта функция остановлена администратором!", show_alert=True)
+            return
+        
+        try:
+            user_id = str(callback.from_user.id)
+            inventory = await load_inventory()
+            
+            if user_id not in inventory or not inventory[user_id]:
+                await callback.message.edit_text(
+                    "📦 Ваш инвентарь пуст!\nДобывайте ресурсы в шахте или на ферме.",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
+                    ])
+                )
+                await callback.answer()
+                return
+            
+            from config import MINE_RESOURCES, FARM_RESOURCES
+            all_resources = MINE_RESOURCES + FARM_RESOURCES
+            
+            resources = {}
+            for item in inventory[user_id]:
+                resources[item] = resources.get(item, 0) + 1
+            
+            keyboard = []
+            for name, count in resources.items():
+                price = 0
+                for r in all_resources:
+                    if r["name"] == name:
+                        price = r["price"]
+                        break
+                keyboard.append([InlineKeyboardButton(
+                    text=f"💎 {name} ({count} шт.) - {price:,.0f}₽",
+                    callback_data=f"buyer_resource_{name}"
+                )])
+            
+            keyboard.append([InlineKeyboardButton(text="💰 Продать все", callback_data="buyer_sell_all")])
+            keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")])
+            
+            await callback.message.edit_text(
+                "🔄 СКУПЩИК\n\nВыберите ресурс для продажи:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в buyer_menu: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data.startswith("buyer_resource_"))
+    async def buyer_resource_menu(callback: types.CallbackQuery):
+        if not await check_access(callback):
+            return
+        
+        try:
+            resource_name = callback.data.replace("buyer_resource_", "")
+            
+            user_id = str(callback.from_user.id)
+            inventory = await load_inventory()
+            
+            if user_id not in inventory:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            from config import MINE_RESOURCES, FARM_RESOURCES
+            all_resources = MINE_RESOURCES + FARM_RESOURCES
+            
+            price = 0
+            for r in all_resources:
+                if r["name"] == resource_name:
+                    price = r["price"]
+                    break
+            
+            if price == 0:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            count = inventory[user_id].count(resource_name)
+            
+            keyboard = [
+                [InlineKeyboardButton(
+                    text=f"💰 Продать 1 шт. ({price:,.0f}₽)",
+                    callback_data=f"buyer_sell_one_{resource_name}"
+                )],
+                [InlineKeyboardButton(
+                    text=f"💰 Продать все ({count} шт.)",
+                    callback_data=f"buyer_sell_all_{resource_name}"
+                )],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="buyer")]
+            ]
+            
+            await callback.message.edit_text(
+                f"💎 {resource_name}\n\n"
+                f"📦 В наличии: {count} шт.\n"
+                f"💰 Цена за шт.: {price:,.0f}₽\n"
+                f"💵 Сумма за все: {count * price:,.0f}₽\n\n"
+                f"Выберите действие:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в buyer_resource_menu: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data.startswith("buyer_sell_one_"))
+    async def buyer_sell_one(callback: types.CallbackQuery):
+        if not await check_access(callback):
+            return
+        
+        try:
+            resource_name = callback.data.replace("buyer_sell_one_", "")
+            
+            user_id = str(callback.from_user.id)
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            inventory = await load_inventory()
+            
+            if user_id not in inventory or resource_name not in inventory[user_id]:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            from config import MINE_RESOURCES, FARM_RESOURCES
+            all_resources = MINE_RESOURCES + FARM_RESOURCES
+            
+            price = 0
+            for r in all_resources:
+                if r["name"] == resource_name:
+                    price = r["price"]
+                    break
+            
+            if price == 0:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            inventory[user_id].remove(resource_name)
+            await save_inventory(inventory)
+            
+            user["money"] += price
+            user["total_earned"] = user.get("total_earned", 0) + price
+            users[user_id] = user
+            await save_users(users)
+            
+            await callback.message.edit_text(
+                f"✅ Продано 1 шт. {resource_name}\n"
+                f"💰 +{price:,.0f}₽\n"
+                f"💳 Новый баланс: {user['money']:,.0f}₽",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 К ресурсам", callback_data="buyer")]
+                ])
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в buyer_sell_one: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data.startswith("buyer_sell_all_"))
+    async def buyer_sell_all_resource(callback: types.CallbackQuery):
+        if not await check_access(callback):
+            return
+        
+        try:
+            resource_name = callback.data.replace("buyer_sell_all_", "")
+            
+            user_id = str(callback.from_user.id)
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            inventory = await load_inventory()
+            
+            if user_id not in inventory:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            from config import MINE_RESOURCES, FARM_RESOURCES
+            all_resources = MINE_RESOURCES + FARM_RESOURCES
+            
+            price = 0
+            for r in all_resources:
+                if r["name"] == resource_name:
+                    price = r["price"]
+                    break
+            
+            if price == 0:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            count = inventory[user_id].count(resource_name)
+            if count == 0:
+                await callback.answer("❌ Нет ресурсов для продажи!", show_alert=True)
+                return
+            
+            total_price = count * price
+            
+            inventory[user_id] = [item for item in inventory[user_id] if item != resource_name]
+            await save_inventory(inventory)
+            
+            user["money"] += total_price
+            user["total_earned"] = user.get("total_earned", 0) + total_price
+            users[user_id] = user
+            await save_users(users)
+            
+            await callback.message.edit_text(
+                f"✅ Продано {count} шт. {resource_name}\n"
+                f"💰 +{total_price:,.0f}₽\n"
+                f"💳 Новый баланс: {user['money']:,.0f}₽",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 К ресурсам", callback_data="buyer")]
+                ])
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в buyer_sell_all_resource: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data == "buyer_sell_all")
+    async def buyer_sell_all(callback: types.CallbackQuery):
+        if not await check_access(callback):
+            return
+        
+        try:
+            user_id = str(callback.from_user.id)
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            inventory = await load_inventory()
+            
+            if user_id not in inventory or not inventory[user_id]:
+                await callback.answer("❌ Инвентарь пуст!", show_alert=True)
+                return
+            
+            from config import MINE_RESOURCES, FARM_RESOURCES
+            all_resources = MINE_RESOURCES + FARM_RESOURCES
+            
+            total_price = 0
+            resource_counts = {}
+            for item in inventory[user_id]:
+                price = 0
+                for r in all_resources:
+                    if r["name"] == item:
+                        price = r["price"]
+                        break
+                total_price += price
+                resource_counts[item] = resource_counts.get(item, 0) + 1
+            
+            inventory[user_id] = []
+            await save_inventory(inventory)
+            
+            user["money"] += total_price
+            user["total_earned"] = user.get("total_earned", 0) + total_price
+            users[user_id] = user
+            await save_users(users)
+            
+            resources_text = ""
+            for name, count in resource_counts.items():
+                resources_text += f"• {name}: {count} шт.\n"
+            
+            await callback.message.edit_text(
+                f"✅ Проданы все ресурсы!\n\n"
+                f"📦 Продано:\n{resources_text}\n"
+                f"💰 Всего получено: {total_price:,.0f}₽\n"
+                f"💳 Новый баланс: {user['money']:,.0f}₽",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 В меню", callback_data="back_main")]
+                ])
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в buyer_sell_all: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    # ========== ОБРАБОТЧИК ПРОМОКОДОВ И ПОДДЕРЖКИ ==========
     @dp.message(F.text, ~F.text.startswith('/'))
     async def handle_promo_and_support(message: types.Message, state: FSMContext):
-        """Обрабатывает промокоды и сообщения в поддержку"""
+        """Обрабатывает только промокоды и поддержку"""
         if not await check_access(message):
             return
         
@@ -596,40 +876,41 @@ def register_user_handlers(dp):
                 await message.answer("⚠️ Произошла ошибка! Попробуйте позже.")
             return
         
-        # Обработка промокодов
-        try:
-            user_id = str(message.from_user.id)
-            users = await load_users()
-            user = users.get(user_id)
-            
-            if not user:
-                return
-            
-            promocodes = await load_promocodes()
-            code = message.text.upper().strip()
-            
-            if code in promocodes:
-                promo = promocodes[code]
-                if promo["used"] >= promo["uses"]:
-                    await message.answer("❌ Промокод использован!")
+        # Обработка промокодов (только если нет активного состояния)
+        if current_state is None:
+            try:
+                user_id = str(message.from_user.id)
+                users = await load_users()
+                user = users.get(user_id)
+                
+                if not user:
                     return
                 
-                if promo["type"] == "brcoins":
-                    user["brcoins"] += promo["amount"]
-                    user["donate_received"] = user.get("donate_received", 0) + promo["amount"]
-                else:
-                    user["money"] += promo["amount"]
-                    user["total_earned"] = user.get("total_earned", 0) + promo["amount"]
+                promocodes = await load_promocodes()
+                code = message.text.upper().strip()
                 
-                promo["used"] += 1
-                users[user_id] = user
-                
-                await save_promocodes(promocodes)
-                await save_users(users)
-                
-                await message.answer(
-                    f"✅ +{promo['amount']:,} "
-                    f"{'BRcoins' if promo['type'] == 'brcoins' else '₽'}!"
-                )
-        except Exception as e:
-            logger.error(f"Ошибка в handle_promo: {e}")
+                if code in promocodes:
+                    promo = promocodes[code]
+                    if promo["used"] >= promo["uses"]:
+                        await message.answer("❌ Промокод использован!")
+                        return
+                    
+                    if promo["type"] == "brcoins":
+                        user["brcoins"] += promo["amount"]
+                        user["donate_received"] = user.get("donate_received", 0) + promo["amount"]
+                    else:
+                        user["money"] += promo["amount"]
+                        user["total_earned"] = user.get("total_earned", 0) + promo["amount"]
+                    
+                    promo["used"] += 1
+                    users[user_id] = user
+                    
+                    await save_promocodes(promocodes)
+                    await save_users(users)
+                    
+                    await message.answer(
+                        f"✅ +{promo['amount']:,} "
+                        f"{'BRcoins' if promo['type'] == 'brcoins' else '₽'}!"
+                    )
+            except Exception as e:
+                logger.error(f"Ошибка в handle_promo: {e}")
