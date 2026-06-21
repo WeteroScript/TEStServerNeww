@@ -24,13 +24,20 @@ async def main():
     logger.info("🤖 Бот запущен!")
     logger.info(f"👑 Админы: {ADMIN_IDS}")
     
-    # Регистрируем все обработчики
-    register_user_handlers(dp)
+    # ==========================================
+    # ===== ВАЖНО! ПОРЯДОК РЕГИСТРАЦИИ =====
+    # ==========================================
+    # Сначала специфичные обработчики (с проверкой state)
+    register_auction_handlers(dp)   # Ставки на аукцион
+    register_jobs_handlers(dp)      # Трейдинг
+    register_casino_handlers(dp)    # Казино
+    
+    # Потом общие обработчики
+    register_user_handlers(dp)      # Промокоды и поддержка (ПОСЛЕДНИЙ!)
+    
+    # Админ-команды и бизнес (callback'и)
     register_admin_handlers(dp)
     register_business_handlers(dp)
-    register_casino_handlers(dp)
-    register_jobs_handlers(dp)
-    register_auction_handlers(dp)
     
     try:
         # Запускаем бизнес-цикл
