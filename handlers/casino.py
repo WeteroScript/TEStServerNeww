@@ -28,6 +28,10 @@ def register_casino_handlers(dp):
             return multipliers.get(cells_opened, 1.0)
         return 1.50 + (cells_opened - 6) * 0.15
     
+    # ==========================================
+    # ===== ГЛАВНОЕ МЕНЮ КАЗИНО =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "casino")
     async def casino_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -66,6 +70,10 @@ def register_casino_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== УСТАНОВКА СТАВКИ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "casino_bet")
     async def casino_bet(callback: types.CallbackQuery, state: FSMContext):
         if not await check_access(callback):
@@ -85,8 +93,9 @@ def register_casino_handlers(dp):
         
         await callback.answer()
 
-    @dp.message(lambda msg: msg.text and not msg.text.startswith('/'))
+    @dp.message(F.text, ~F.text.startswith('/'))
     async def process_casino_bet(message: types.Message, state: FSMContext):
+        """Обработчик ставок в казино"""
         current_state = await state.get_state()
         if current_state != "waiting_for_casino_bet":
             return
@@ -121,6 +130,7 @@ def register_casino_handlers(dp):
             
             await message.answer(f"✅ Ставка установлена: {bet:,.0f}₽")
             
+            # Возвращаем в меню казино
             keyboard = [
                 [InlineKeyboardButton(text="💰 Введите ставку", callback_data="casino_bet")],
                 [InlineKeyboardButton(text="🎲 Кубик", callback_data="casino_dice")],
@@ -145,6 +155,10 @@ def register_casino_handlers(dp):
             await state.clear()
             await message.answer("⚠️ Ошибка!")
 
+    # ==========================================
+    # ===== КУБИК =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "casino_dice")
     async def casino_dice(callback: types.CallbackQuery):
         if not await check_access(callback):
@@ -242,6 +256,10 @@ def register_casino_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== СЛОТЫ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "casino_slots")
     async def casino_slots(callback: types.CallbackQuery):
         if not await check_access(callback):
@@ -347,6 +365,10 @@ def register_casino_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== МИНЫ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "casino_mines")
     async def casino_mines(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -401,6 +423,10 @@ def register_casino_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== НАСТРОЙКА МИН =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "mines_settings")
     async def mines_settings(callback: types.CallbackQuery, state: FSMContext):
         if not await check_access(callback):
@@ -420,7 +446,7 @@ def register_casino_handlers(dp):
         
         await callback.answer()
 
-    @dp.message(lambda msg: msg.text and not msg.text.startswith('/'))
+    @dp.message(F.text, ~F.text.startswith('/'))
     async def process_mines_count(message: types.Message, state: FSMContext):
         current_state = await state.get_state()
         if current_state != "waiting_for_mines_count":
@@ -451,6 +477,7 @@ def register_casino_handlers(dp):
             
             await message.answer(f"✅ Количество мин установлено: {mines}")
             
+            # Возвращаем в меню мин
             keyboard = [
                 [InlineKeyboardButton(text="💣 Играть", callback_data="mines_play")],
                 [InlineKeyboardButton(text="⚙️ Настроить мины", callback_data="mines_settings")],
@@ -481,6 +508,10 @@ def register_casino_handlers(dp):
             await state.clear()
             await message.answer("⚠️ Ошибка!")
 
+    # ==========================================
+    # ===== НАСТРОЙКА ПОЛЯ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "mines_field")
     async def mines_field(callback: types.CallbackQuery, state: FSMContext):
         if not await check_access(callback):
@@ -500,7 +531,7 @@ def register_casino_handlers(dp):
         
         await callback.answer()
 
-    @dp.message(lambda msg: msg.text and not msg.text.startswith('/'))
+    @dp.message(F.text, ~F.text.startswith('/'))
     async def process_field_size(message: types.Message, state: FSMContext):
         current_state = await state.get_state()
         if current_state != "waiting_for_field_size":
@@ -531,6 +562,7 @@ def register_casino_handlers(dp):
             
             await message.answer(f"✅ Размер поля установлен: {size}x{size}")
             
+            # Возвращаем в меню мин
             keyboard = [
                 [InlineKeyboardButton(text="💣 Играть", callback_data="mines_play")],
                 [InlineKeyboardButton(text="⚙️ Настроить мины", callback_data="mines_settings")],
@@ -561,6 +593,10 @@ def register_casino_handlers(dp):
             await state.clear()
             await message.answer("⚠️ Ошибка!")
 
+    # ==========================================
+    # ===== ИГРА В МИНЫ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "mines_play")
     async def mines_play(callback: types.CallbackQuery, state: FSMContext):
         if not await check_access(callback):
@@ -585,14 +621,9 @@ def register_casino_handlers(dp):
                 return
             
             total_cells = field_size * field_size
-            cells = []
-            for i in range(total_cells):
-                cells.append(i)
-            
             mine_positions = random.sample(range(total_cells), mines_count)
             
             mines_games[user_id] = {
-                "cells": cells,
                 "mine_positions": mine_positions,
                 "field_size": field_size,
                 "mines_count": mines_count,
@@ -600,6 +631,7 @@ def register_casino_handlers(dp):
                 "bet": bet
             }
             
+            # Создаем клавиатуру с клетками
             keyboard = []
             row = []
             for i in range(total_cells):
@@ -660,16 +692,18 @@ def register_casino_handlers(dp):
             users = await load_users()
             user = users.get(user_id, get_default_user())
             bet = game["bet"]
+            total_cells = game["field_size"] * game["field_size"]
             
+            # Проверяем, попали ли на мину
             if cell_num in game["mine_positions"]:
                 user["money"] -= bet
                 users[user_id] = user
                 await save_users(users)
                 del mines_games[user_id]
                 
+                # Показываем все мины
                 keyboard = []
                 row = []
-                total_cells = game["field_size"] * game["field_size"]
                 for i in range(total_cells):
                     if i in game["mine_positions"]:
                         row.append(InlineKeyboardButton(
@@ -709,12 +743,13 @@ def register_casino_handlers(dp):
                 )
                 return
             
+            # Добавляем клетку в открытые
             game["revealed"].append(cell_num)
             mines_games[user_id] = game
             
-            total_cells = game["field_size"] * game["field_size"]
             safe_cells = total_cells - game["mines_count"]
             
+            # Проверяем, все ли безопасные клетки открыты
             if len(game["revealed"]) == safe_cells:
                 multiplier = get_mines_multiplier(len(game["revealed"]))
                 win = int(bet * multiplier)
@@ -724,6 +759,7 @@ def register_casino_handlers(dp):
                 await save_users(users)
                 del mines_games[user_id]
                 
+                # Показываем все клетки
                 keyboard = []
                 row = []
                 for i in range(total_cells):
@@ -760,6 +796,7 @@ def register_casino_handlers(dp):
                 )
                 return
             
+            # Обновляем игровое поле
             keyboard = []
             row = []
             for i in range(total_cells):
