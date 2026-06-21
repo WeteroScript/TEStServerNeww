@@ -555,7 +555,6 @@ def register_casino_handlers(dp):
                 text=f"💰 Забрать выигрыш: {bet}₽",
                 callback_data="mines_take_win"
             )])
-            # ✅ Убираем кнопку "Назад" во время игры!
             
             text = f"💣 МИНЫ\n\n"
             text += f"💰 Ставка: {bet:,.0f}₽ (списана)\n"
@@ -820,3 +819,14 @@ def register_casino_handlers(dp):
             await callback.answer("❌ Нет активной игры!", show_alert=True)
         
         await callback.answer()
+
+
+# ==========================================
+# ===== ЭКСПОРТ ДЛЯ ИСПОЛЬЗОВАНИЯ В ДРУГИХ МОДУЛЯХ =====
+# ==========================================
+
+__all__ = [
+    'mines_games',
+    'get_min_mines_for_size',
+    'register_casino_handlers'
+            ]
