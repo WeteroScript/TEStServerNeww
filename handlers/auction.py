@@ -186,8 +186,10 @@ def register_auction_handlers(dp):
         await show_auction_lot(callback.message, user_id, page)
         await callback.answer()
 
-    @dp.message(lambda msg: msg.text and not msg.text.startswith('/'))
+    # ========== ОСНОВНОЙ ОБРАБОТЧИК СТАВОК ==========
+    @dp.message(F.text, ~F.text.startswith('/'))
     async def process_auction_bid(message: types.Message, state: FSMContext):
+        """Обработчик ставок на аукционе"""
         current_state = await state.get_state()
         if current_state != "waiting_for_auction_bid":
             return
@@ -215,10 +217,23 @@ def register_auction_handlers(dp):
             
             if success:
                 await state.clear()
+                # Обновляем отображение лота
                 await show_auction_lot(message, user_id, page)
                 await message.answer(msg)
             else:
                 await message.answer(msg)
+                # Оставляем состояние для повторной попытки
+                lots = await get_active_lots()
+                if page < len(lots):
+                    lot = lots[page]
+                    await message.answer(
+                        f"✏️ Введите новую сумму ставки для **{lot['car_name']}**\n\n"
+                        f"💰 Текущая ставка: {lot['current_bid']:,}₽\n"
+                        f"⚠️ Ставка должна быть выше текущей!",
+                        parse_mode="Markdown"
+                    )
+                    await state.set_state("waiting_for_auction_bid")
+                    await state.update_data(auction_page=page)
                 
         except ValueError:
             await message.answer("❌ Введите число!")
