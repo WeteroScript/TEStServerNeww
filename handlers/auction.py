@@ -195,4 +195,4 @@ def register_auction_handlers(dp):
 __all__ = [
     'show_auction_lot',
     'register_auction_handlers'
-    ]
+        ]
