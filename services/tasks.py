@@ -84,12 +84,87 @@ async def get_auto_mine_resource():
             return res["name"]
     return random.choice(resources)["name"]
 
+async def collect_business_for_user(user_id, biz_key, config, data, business, inventory):
+    """Собирает доход для одного бизнеса"""
+    users_updated = False
+    business_updated = False
+    inventory_updated = False
+    
+    if config.get("profit_type") == "money":
+        profit = random.randint(config.get("profit_min", 0), config.get("profit_max", 0))
+        data["money"] = data.get("money", 0) + profit
+        data["total_earned"] = data.get("total_earned", 0) + profit
+        users_updated = True
+        
+        if biz_key in business:
+            business[biz_key]["total_earned"] = business[biz_key].get("total_earned", 0) + profit
+            business_updated = True
+        
+        try:
+            await bot.send_message(
+                int(user_id),
+                f"🏢 {config.get('emoji', '')} {config.get('name', biz_key)}\n"
+                f"💰 Авто-сбор: +{profit:,.0f}₽"
+            )
+        except Exception as e:
+            logger.warning(f"Не удалось отправить уведомление {user_id}: {e}")
+    
+    elif config.get("profit_type") == "resources":
+        if user_id not in inventory:
+            inventory[user_id] = []
+        
+        num_resources = random.randint(config.get("min_resources", 1), config.get("max_resources", 3))
+        resources_text = []
+        resources_list = config.get("resources", [])
+        
+        for _ in range(num_resources):
+            if resources_list:
+                total_chance = sum(r.get("chance", 0) for r in resources_list)
+                roll = random.random() * total_chance if total_chance > 0 else 0
+                cumulative = 0
+                selected_resource = resources_list[0]["name"] if resources_list else "Рубин"
+                
+                for res in resources_list:
+                    cumulative += res.get("chance", 0)
+                    if roll <= cumulative:
+                        selected_resource = res["name"]
+                        break
+                
+                inventory[user_id].append(selected_resource)
+                resources_text.append(selected_resource)
+                inventory_updated = True
+        
+        if biz_key in business:
+            business[biz_key]["total_earned"] = business[biz_key].get("total_earned", 0) + num_resources
+            business_updated = True
+        
+        try:
+            resource_counts = {}
+            for res in resources_text:
+                resource_counts[res] = resource_counts.get(res, 0) + 1
+            
+            text = f"🏢 {config.get('emoji', '')} {config.get('name', biz_key)}\n"
+            text += f"📦 Авто-сбор: +{num_resources} ресурсов\n"
+            for res_name, count in resource_counts.items():
+                text += f"   • {res_name}: {count} шт.\n"
+            text += f"\n📦 Ресурсы сохранены в инвентаре!"
+            
+            await bot.send_message(int(user_id), text)
+            logger.info(f"✅ Авто-сбор для {user_id}: +{num_resources} ресурсов")
+        except Exception as e:
+            logger.warning(f"Не удалось отправить уведомление {user_id}: {e}")
+    
+    # Обновляем время
+    data["business"][biz_key]["last_collect"] = datetime.now().isoformat()
+    users_updated = True
+    
+    return users_updated, business_updated, inventory_updated
+
 async def check_business_loop():
     """Цикл автоматического сбора бизнесов"""
     global business_running
     while business_running:
         try:
-            # Загружаем все данные один раз за цикл
             business = await load_business()
             users = await load_users()
             inventory = await load_inventory()
@@ -102,7 +177,6 @@ async def check_business_loop():
                 user_business = data.get("business", {})
                 
                 for biz_key, biz_data in user_business.items():
-                    # Проверяем: бизнес принадлежит пользователю И включен авто-сбор
                     if biz_data.get("owned", False) and biz_data.get("auto_collect", False):
                         last_collect = biz_data.get("last_collect")
                         config = BUSINESS_CONFIG.get(biz_key)
@@ -110,91 +184,27 @@ async def check_business_loop():
                         if not config:
                             continue
                         
-                        # Если last_collect нет - устанавливаем сейчас
+                        # ✅ Если last_collect нет - собираем сразу!
                         if not last_collect:
                             biz_data["last_collect"] = datetime.now().isoformat()
                             user_business[biz_key]["last_collect"] = datetime.now().isoformat()
                             users_updated = True
+                            # Собираем доход сразу
+                            u, b, i = await collect_business_for_user(user_id, biz_key, config, data, business, inventory)
+                            users_updated = users_updated or u
+                            business_updated = business_updated or b
+                            inventory_updated = inventory_updated or i
                             continue
                         
                         last_time = datetime.fromisoformat(last_collect)
                         elapsed = (datetime.now() - last_time).total_seconds()
                         cooldown = config.get("cooldown", 600)
                         
-                        # Проверяем, прошло ли время
                         if elapsed >= cooldown:
-                            logger.info(f"🔄 Авто-сбор для {user_id}: {biz_key} (прошло {elapsed} сек)")
-                            
-                            # Сбор денег
-                            if config.get("profit_type") == "money":
-                                profit = random.randint(config.get("profit_min", 0), config.get("profit_max", 0))
-                                data["money"] = data.get("money", 0) + profit
-                                data["total_earned"] = data.get("total_earned", 0) + profit
-                                users_updated = True
-                                
-                                if biz_key in business:
-                                    business[biz_key]["total_earned"] = business[biz_key].get("total_earned", 0) + profit
-                                    business_updated = True
-                                
-                                try:
-                                    await bot.send_message(
-                                        int(user_id),
-                                        f"🏢 {config.get('emoji', '')} {config.get('name', biz_key)}\n"
-                                        f"💰 Авто-сбор: +{profit:,.0f}₽"
-                                    )
-                                except Exception as e:
-                                    logger.warning(f"Не удалось отправить уведомление {user_id}: {e}")
-                            
-                            # Сбор ресурсов (для авто-шахты)
-                            elif config.get("profit_type") == "resources":
-                                if user_id not in inventory:
-                                    inventory[user_id] = []
-                                
-                                num_resources = random.randint(config.get("min_resources", 1), config.get("max_resources", 3))
-                                resources_text = []
-                                resources_list = config.get("resources", [])
-                                
-                                for _ in range(num_resources):
-                                    if resources_list:
-                                        total_chance = sum(r.get("chance", 0) for r in resources_list)
-                                        roll = random.random() * total_chance if total_chance > 0 else 0
-                                        cumulative = 0
-                                        selected_resource = resources_list[0]["name"] if resources_list else "Рубин"
-                                        
-                                        for res in resources_list:
-                                            cumulative += res.get("chance", 0)
-                                            if roll <= cumulative:
-                                                selected_resource = res["name"]
-                                                break
-                                        
-                                        inventory[user_id].append(selected_resource)
-                                        resources_text.append(selected_resource)
-                                        inventory_updated = True
-                                
-                                if biz_key in business:
-                                    business[biz_key]["total_earned"] = business[biz_key].get("total_earned", 0) + num_resources
-                                    business_updated = True
-                                
-                                try:
-                                    resource_counts = {}
-                                    for res in resources_text:
-                                        resource_counts[res] = resource_counts.get(res, 0) + 1
-                                    
-                                    text = f"🏢 {config.get('emoji', '')} {config.get('name', biz_key)}\n"
-                                    text += f"📦 Авто-сбор: +{num_resources} ресурсов\n"
-                                    for res_name, count in resource_counts.items():
-                                        text += f"   • {res_name}: {count} шт.\n"
-                                    text += f"\n📦 Ресурсы сохранены в инвентаре!"
-                                    
-                                    await bot.send_message(int(user_id), text)
-                                    logger.info(f"✅ Авто-сбор для {user_id}: +{num_resources} ресурсов")
-                                except Exception as e:
-                                    logger.warning(f"Не удалось отправить уведомление {user_id}: {e}")
-                            
-                            # Обновляем время последнего сбора
-                            biz_data["last_collect"] = datetime.now().isoformat()
-                            user_business[biz_key]["last_collect"] = datetime.now().isoformat()
-                            users_updated = True
+                            u, b, i = await collect_business_for_user(user_id, biz_key, config, data, business, inventory)
+                            users_updated = users_updated or u
+                            business_updated = business_updated or b
+                            inventory_updated = inventory_updated or i
             
             # Сохраняем все изменения один раз за цикл
             if users_updated:
@@ -204,7 +214,7 @@ async def check_business_loop():
             if inventory_updated:
                 await save_inventory(inventory)
             
-            await asyncio.sleep(10)  # Проверка каждые 10 секунд
+            await asyncio.sleep(10)
             
         except Exception as e:
             logger.error(f"❌ Ошибка в цикле проверки бизнеса: {e}")
