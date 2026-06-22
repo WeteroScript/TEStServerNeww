@@ -1,4 +1,5 @@
 from aiogram import types, F
+from aiogram import types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -14,13 +15,15 @@ from utils.helpers import (
 )
 from services.currency import currency_rates
 from handlers.casino import mines_games, get_min_mines_for_size
+from handlers.auction import show_auction_lot  # ← ДОБАВИТЬ ЭТУ СТРОКУ!
 
-# ✅ States
+# States
 from states import (
     SupportStates, AuctionStates, TradeStates, CasinoStates
 )
 
 def register_user_handlers(dp):
+    # ... остальной код ...
     
     async def get_main_menu(user_id: str):
         """Главное меню"""
