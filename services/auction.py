@@ -84,19 +84,26 @@ async def update_auction_lots(force: bool = False):
     data = await load_auction_data()
     lots = data.get("lots", [])
     
-    if not force:
-        lots = [lot for lot in lots if not lot.get("sold", False)]
-    
-    if len(lots) < AUCTION_CONFIG["max_lots"] or force:
+    # ✅ ЕСЛИ FORCE = TRUE — ПОЛНОСТЬЮ ПЕРЕСОЗДАЁМ ВСЕ ЛОТЫ
+    if force:
+        # Отменяем все старые таймеры
         for timer in auction_timers.values():
             timer.cancel()
         auction_timers.clear()
         
-        new_lots = generate_auction_lots(AUCTION_CONFIG["max_lots"])
+        # Генерируем новые лоты
+        lots = generate_auction_lots(AUCTION_CONFIG["max_lots"])
         
-        if force:
-            lots = new_lots
-        else:
+        logger.info(f"🔄 Аукцион полностью обновлён. Создано {len(lots)} новых лотов")
+    
+    else:
+        # Только дозаполняем пустые слоты
+        lots = [lot for lot in lots if not lot.get("sold", False)]
+        
+        if len(lots) < AUCTION_CONFIG["max_lots"]:
+            new_lots = generate_auction_lots(AUCTION_CONFIG["max_lots"] - len(lots))
+            
+            # Проверяем, какие машины уже есть
             existing_names = [lot["car_name"] for lot in lots]
             for new_lot in new_lots:
                 if new_lot["car_name"] not in existing_names:
@@ -104,16 +111,16 @@ async def update_auction_lots(force: bool = False):
                     existing_names.append(new_lot["car_name"])
             
             lots = lots[:AUCTION_CONFIG["max_lots"]]
+            logger.info(f"🔄 Аукцион дозаполнен. Лотов: {len(lots)}")
     
     data["lots"] = lots
     data["last_update"] = datetime.now().isoformat()
     await save_auction_data(data)
     
+    # Запускаем таймеры для всех активных лотов
     for i, lot in enumerate(lots):
         if lot.get("is_active", True) and not lot.get("sold", False):
             await start_auction_timer(i)
-    
-    logger.info(f"🔄 Аукцион обновлён. Лотов: {len(lots)}")
 
 async def auction_update_loop():
     """Цикл обновления аукциона"""
@@ -124,7 +131,8 @@ async def auction_update_loop():
     while auction_running:
         logger.info("🔄 Auction loop tick...")
         try:
-            await update_auction_lots()
+            # ✅ ИСПРАВЛЕНО: принудительное полное обновление
+            await update_auction_lots(force=True)
         except Exception as e:
             logger.error(f"❌ Ошибка обновления аукциона: {e}")
         await asyncio.sleep(AUCTION_CONFIG["update_interval"])
