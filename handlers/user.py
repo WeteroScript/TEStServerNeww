@@ -13,12 +13,9 @@ from utils.helpers import (
     is_function_disabled, is_admin
 )
 from services.currency import currency_rates
-
-# ✅ ДОБАВЛЯЕМ ЭТИ ИМПОРТЫ!
 from handlers.casino import mines_games, get_min_mines_for_size
 
 def register_user_handlers(dp):
-    # ... остальной код ...
     
     async def get_main_menu(user_id: str):
         """Главное меню"""
@@ -66,16 +63,13 @@ def register_user_handlers(dp):
                 )
                 return
             
-            # ✅ Проверяем незавершенную игру в казино
-            from handlers.casino import mines_games
+            # Проверяем незавершенную игру в казино
             if user_id in mines_games:
                 game = mines_games[user_id]
                 total_cells = game["field_size"] * game["field_size"]
                 safe_cells = total_cells - game["mines_count"]
                 
-                # Проверяем, может игра уже завершена?
                 if len(game["revealed"]) == safe_cells:
-                    # Игра завершена, удаляем
                     del mines_games[user_id]
                 else:
                     await message.answer(
@@ -197,6 +191,10 @@ def register_user_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== ГАРАЖ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "garage")
     async def garage_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -322,6 +320,10 @@ def register_user_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== ИНВЕНТАРЬ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "inventory_main")
     async def inventory_main_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -374,6 +376,10 @@ def register_user_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== ФОРБС =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "forbes")
     async def forbes_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -476,6 +482,10 @@ def register_user_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== ДОНАТ =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "donate")
     async def donate_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -563,6 +573,10 @@ def register_user_handlers(dp):
         
         await callback.answer()
 
+    # ==========================================
+    # ===== СКУПЩИК =====
+    # ==========================================
+    
     @dp.callback_query(F.data == "buyer")
     async def buyer_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -854,8 +868,6 @@ def register_user_handlers(dp):
         
         user_id = str(callback.from_user.id)
         
-        from handlers.casino import mines_games
-        
         if user_id not in mines_games:
             await callback.answer("❌ Нет активной игры!", show_alert=True)
             return
@@ -914,7 +926,7 @@ def register_user_handlers(dp):
         await callback.answer()
 
     # ==========================================
-    # ===== ГЛАВНЫЙ ОБРАБОТЧИК СООБЩЕНИЙ =====
+    # ===== ГЛАВНЫЙ ОБРАБОТЧИК ВСЕХ СООБЩЕНИЙ =====
     # ==========================================
     
     @dp.message(F.text, ~F.text.startswith('/'))
@@ -929,7 +941,7 @@ def register_user_handlers(dp):
         logger.info(f"📩 Сообщение: {message.text}, Состояние: {current_state}")
         
         # ==========================================
-        # ===== 1. АУКЦИОН =====
+        # ===== 1. АУКЦИОН (ставка) =====
         # ==========================================
         if current_state == "waiting_for_auction_bid":
             try:
@@ -1155,13 +1167,10 @@ def register_user_handlers(dp):
             try:
                 mines = int(message.text)
                 
-                # Получаем текущий размер поля
                 users = await load_users()
                 user = users.get(user_id, get_default_user())
                 field_size = user.get("casino", {}).get("field_size", 5)
                 
-                # Проверяем минимальное количество мин
-                from handlers.casino import get_min_mines_for_size
                 min_mines = get_min_mines_for_size(field_size)
                 
                 if mines < min_mines or mines > 10:
@@ -1230,8 +1239,6 @@ def register_user_handlers(dp):
                     user["casino"] = {}
                 user["casino"]["field_size"] = size
                 
-                # Автоматически корректируем количество мин
-                from handlers.casino import get_min_mines_for_size
                 min_mines = get_min_mines_for_size(size)
                 current_mines = user["casino"].get("mines_count", 4)
                 if current_mines < min_mines:
@@ -1357,7 +1364,6 @@ def register_user_handlers(dp):
                     promo["used"] += 1
                     users[user_id] = user
                     
-                    # ✅ Фикс: Сохраняем промокоды!
                     await save_promocodes(promocodes)
                     await save_users(users)
                     
@@ -1367,3 +1373,13 @@ def register_user_handlers(dp):
                     )
             except Exception as e:
                 logger.error(f"Ошибка промокода: {e}")
+                return
+        
+        # ==========================================
+        # ===== 8. ЕСЛИ НИЧЕГО НЕ ПОДОШЛО =====
+        # ==========================================
+        # Если сообщение не обработано ни одним обработчиком
+        if current_state is None:
+            # Проверяем, может это бизнес?
+            # Игнорируем, так как бизнес обрабатывается через callback'и
+            pass
