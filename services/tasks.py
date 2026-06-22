@@ -4,10 +4,16 @@ import string
 from datetime import datetime
 
 from database.file_manager import (
-    load_users, load_settings, save_settings, 
-    load_business, save_business, 
-    load_inventory, save_inventory, 
-    load_promocodes, save_promocodes
+    load_users,
+    save_users,  # ← ДОБАВЛЕНО!
+    load_settings,
+    save_settings,
+    load_business,
+    save_business,
+    load_inventory,
+    save_inventory,
+    load_promocodes,
+    save_promocodes
 )
 from config import PROMO_CHANNEL_ID, bot, logger, BUSINESS_CONFIG
 
@@ -184,12 +190,11 @@ async def check_business_loop():
                         if not config:
                             continue
                         
-                        # ✅ Если last_collect нет - собираем сразу!
+                        # Если last_collect нет - собираем сразу!
                         if not last_collect:
                             biz_data["last_collect"] = datetime.now().isoformat()
                             user_business[biz_key]["last_collect"] = datetime.now().isoformat()
                             users_updated = True
-                            # Собираем доход сразу
                             u, b, i = await collect_business_for_user(user_id, biz_key, config, data, business, inventory)
                             users_updated = users_updated or u
                             business_updated = business_updated or b
@@ -208,7 +213,7 @@ async def check_business_loop():
             
             # Сохраняем все изменения один раз за цикл
             if users_updated:
-                await save_users(users)
+                await save_users(users)  # ← ТЕПЕРЬ РАБОТАЕТ!
             if business_updated:
                 await save_business(business)
             if inventory_updated:
