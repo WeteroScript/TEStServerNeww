@@ -86,7 +86,7 @@ async def get_auto_mine_resource():
 
 async def check_business_loop():
     """Цикл автоматического сбора бизнесов"""
-    global business_running, business_notified
+    global business_running
     while business_running:
         try:
             # Загружаем все данные один раз за цикл
@@ -102,8 +102,13 @@ async def check_business_loop():
                 user_business = data.get("business", {})
                 
                 for biz_key, biz_data in user_business.items():
+                    # Проверяем: бизнес принадлежит пользователю И включен авто-сбор
                     if biz_data.get("owned", False) and biz_data.get("auto_collect", False):
                         last_collect = biz_data.get("last_collect")
+                        config = BUSINESS_CONFIG.get(biz_key)
+                        
+                        if not config:
+                            continue
                         
                         # Если last_collect нет - устанавливаем сейчас
                         if not last_collect:
@@ -114,21 +119,18 @@ async def check_business_loop():
                         
                         last_time = datetime.fromisoformat(last_collect)
                         elapsed = (datetime.now() - last_time).total_seconds()
-                        
-                        config = BUSINESS_CONFIG.get(biz_key)
-                        if not config:
-                            continue
-                        
                         cooldown = config.get("cooldown", 600)
                         
+                        # Проверяем, прошло ли время
                         if elapsed >= cooldown:
-                            logger.info(f"🔄 Авто-сбор для {user_id}: {biz_key}")
+                            logger.info(f"🔄 Авто-сбор для {user_id}: {biz_key} (прошло {elapsed} сек)")
                             
                             # Сбор денег
                             if config.get("profit_type") == "money":
                                 profit = random.randint(config.get("profit_min", 0), config.get("profit_max", 0))
                                 data["money"] = data.get("money", 0) + profit
                                 data["total_earned"] = data.get("total_earned", 0) + profit
+                                users_updated = True
                                 
                                 if biz_key in business:
                                     business[biz_key]["total_earned"] = business[biz_key].get("total_earned", 0) + profit
@@ -143,7 +145,7 @@ async def check_business_loop():
                                 except Exception as e:
                                     logger.warning(f"Не удалось отправить уведомление {user_id}: {e}")
                             
-                            # Сбор ресурсов
+                            # Сбор ресурсов (для авто-шахты)
                             elif config.get("profit_type") == "resources":
                                 if user_id not in inventory:
                                     inventory[user_id] = []
