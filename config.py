@@ -210,7 +210,7 @@ AUCTION_CARS = {
 # ========== НАСТРОЙКИ АУКЦИОНА ==========
 AUCTION_CONFIG = {
     "max_lots": 15,
-    "update_interval": 1800,
+    "update_interval": 60,
     "bid_timeout": 10,
     "default_start_bid": 1000000
 }
