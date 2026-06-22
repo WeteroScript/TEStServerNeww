@@ -163,7 +163,7 @@ def register_auction_handlers(dp):
         current_bid = lot.get("current_bid", 0)
         
         await state.update_data(auction_page=page)
-        await state.set_state(AuctionStates.waiting_for_auction_bid)
+        await state.set_state(AuctionStates.waiting_for_auction_bid)  # ← ИСПРАВЛЕНО!
         
         await callback.message.edit_text(
             f"✏️ Введите сумму ставки для **{lot['car_name']}**\n\n"
@@ -192,7 +192,7 @@ def register_auction_handlers(dp):
 # ===== ЭКСПОРТ ДЛЯ ИСПОЛЬЗОВАНИЯ В ДРУГИХ МОДУЛЯХ =====
 # ==========================================
 
-__all__ = [
+__all__ = [  # ← ИСПРАВЛЕНО!
     'show_auction_lot',
     'register_auction_handlers'
-]
+            ]
