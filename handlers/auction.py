@@ -6,6 +6,7 @@ from config import bot, logger
 from database.file_manager import get_active_lots
 from utils.helpers import check_access, is_function_disabled, get_stars_display
 from services.auction import place_bid
+from states import AuctionStates
 
 user_auction_page = {}
 
@@ -162,7 +163,7 @@ def register_auction_handlers(dp):
         current_bid = lot.get("current_bid", 0)
         
         await state.update_data(auction_page=page)
-        await state.set_state("waiting_for_auction_bid")
+        await state.set_state(AuctionStates.waiting_for_auction_bid)
         
         await callback.message.edit_text(
             f"✏️ Введите сумму ставки для **{lot['car_name']}**\n\n"
