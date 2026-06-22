@@ -999,15 +999,24 @@ def register_user_handlers(dp):
                 
                 promo = promocodes[code]
                 
-                if not all(key in promo for key in ["used", "uses", "type", "amount"]):
+                # ✅ Проверка структуры
+                if not all(key in promo for key in ["used", "uses", "type", "amount", "used_by"]):
                     logger.error(f"❌ Некорректная структура промокода: {promo}")
                     await message.answer("⚠️ Ошибка в структуре промокода!")
                     return
                 
+                # ✅ ПРОВЕРЯЕМ, НЕ ИСПОЛЬЗОВАЛ ЛИ УЖЕ ЭТОТ ПОЛЬЗОВАТЕЛЬ ПРОМОКОД
+                used_by = promo.get("used_by", [])
+                if user_id in used_by:
+                    await message.answer("❌ Вы уже использовали этот промокод!")
+                    return
+                
+                # ✅ ПРОВЕРЯЕМ ГЛОБАЛЬНОЕ КОЛИЧЕСТВО ИСПОЛЬЗОВАНИЙ
                 if promo["used"] >= promo["uses"]:
                     await message.answer("❌ Промокод использован!")
                     return
                 
+                # ✅ АКТИВИРУЕМ ПРОМОКОД
                 if promo["type"] == "brcoins":
                     user["brcoins"] += promo["amount"]
                     user["donate_received"] = user.get("donate_received", 0) + promo["amount"]
@@ -1015,7 +1024,10 @@ def register_user_handlers(dp):
                     user["money"] += promo["amount"]
                     user["total_earned"] = user.get("total_earned", 0) + promo["amount"]
                 
+                # ✅ ОБНОВЛЯЕМ ДАННЫЕ
                 promo["used"] += 1
+                promo["used_by"] = used_by + [user_id]
+                
                 users[user_id] = user
                 
                 await save_promocodes(promocodes)
@@ -1053,7 +1065,6 @@ def register_user_handlers(dp):
                 
                 if success:
                     await state.clear()
-                    # Обновляем лот
                     try:
                         await show_auction_lot(message, user_id, page)
                     except Exception as e:
@@ -1154,7 +1165,6 @@ def register_user_handlers(dp):
                 
                 await state.clear()
                 
-                # Возвращаем в меню трейдинга
                 currency_rates.update_rates()
                 users = await load_users()
                 user = users.get(user_id, get_default_user())
