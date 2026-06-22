@@ -3,12 +3,13 @@ import asyncio
 import sys
 from config import bot, dp, logger, ADMIN_IDS
 from database.file_manager import load_settings
-from services.tasks import (
-    promo_auto_loop, check_business_loop, 
-    promo_running, promo_task, 
-    business_running, business_check_task
-)
+
+# ✅ ИМПОРТИРУЕМ ВЕСЬ МОДУЛЬ, А НЕ ОТДЕЛЬНЫЕ ПЕРЕМЕННЫЕ!
+import services.tasks as tasks
+from services.tasks import check_business_loop, promo_auto_loop
+
 from services.auction import auction_update_loop, update_auction_lots, auction_running
+
 from handlers import (
     register_admin_handlers,
     register_user_handlers,
@@ -19,7 +20,7 @@ from handlers import (
 )
 
 async def main():
-    global promo_running, promo_task, business_running, business_check_task, auction_running
+    global auction_running
     
     logger.info("🤖 Бот запущен!")
     logger.info(f"👑 Админы: {ADMIN_IDS}")
@@ -33,18 +34,17 @@ async def main():
     register_casino_handlers(dp)    # Казино
     
     # Потом общие обработчики
-    register_user_handlers(dp)      # Промокоды и поддержка (ПОСЛЕДНИЙ!)
-    
-    # Админ-команды и бизнес (callback'и)
-    register_admin_handlers(dp)
-    register_business_handlers(dp)
+    register_user_handlers(dp)      # Промокоды и поддержка
+    register_admin_handlers(dp)     # Админ-команды
+    register_business_handlers(dp)  # Бизнес
     
     try:
         # ==========================================
         # ===== ЗАПУСК БИЗНЕС-ЦИКЛА (АВТО-СБОР) =====
         # ==========================================
-        business_running = True
-        business_check_task = asyncio.create_task(check_business_loop())
+        # ✅ ПРАВИЛЬНО: меняем переменную В МОДУЛЕ tasks
+        tasks.business_running = True
+        tasks.business_check_task = asyncio.create_task(tasks.check_business_loop())
         logger.info("🏢 Цикл проверки бизнесов запущен!")
         
         # ==========================================
@@ -63,8 +63,9 @@ async def main():
         # ==========================================
         settings = await load_settings()
         if settings.get("promo_auto", False):
-            promo_running = True
-            promo_task = asyncio.create_task(promo_auto_loop())
+            # ✅ ПРАВИЛЬНО: меняем переменную В МОДУЛЕ tasks
+            tasks.promo_running = True
+            tasks.promo_task = asyncio.create_task(tasks.promo_auto_loop())
             logger.info("📢 Авто-промокоды запущены!")
         
         # ==========================================
