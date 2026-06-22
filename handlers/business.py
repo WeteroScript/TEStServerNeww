@@ -307,6 +307,10 @@ def register_business_handlers(dp):
             new_status = not current_status
             user["business"][business_key]["auto_collect"] = new_status
             
+            # ✅ Если last_collect не установлен - устанавливаем сейчас
+            if not user["business"][business_key].get("last_collect"):
+                user["business"][business_key]["last_collect"] = datetime.now().isoformat()
+            
             users[user_id] = user
             await save_users(users)
             
