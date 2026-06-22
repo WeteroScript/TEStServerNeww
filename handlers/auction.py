@@ -186,3 +186,13 @@ def register_auction_handlers(dp):
         page = user_auction_page.get(user_id, 0)
         await show_auction_lot(callback.message, user_id, page)
         await callback.answer()
+
+
+# ==========================================
+# ===== ЭКСПОРТ ДЛЯ ИСПОЛЬЗОВАНИЯ В ДРУГИХ МОДУЛЯХ =====
+# ==========================================
+
+__all__ = [
+    'show_auction_lot',
+    'register_auction_handlers'
+]
