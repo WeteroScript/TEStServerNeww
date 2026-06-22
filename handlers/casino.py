@@ -217,7 +217,7 @@ def register_casino_handlers(dp):
         await callback.answer()
 
     # ==========================================
-    # ===== СЛОТЫ =====
+    # ===== СЛОТЫ (ИСПРАВЛЕННЫЕ) =====
     # ==========================================
     
     @dp.callback_query(F.data == "casino_slots")
@@ -243,18 +243,11 @@ def register_casino_handlers(dp):
                 await callback.answer(f"❌ Недостаточно средств!", show_alert=True)
                 return
             
-            # Списываем ставку только один раз при входе в игру
-            if not user.get("casino", {}).get("bet_spent", False):
-                user["money"] -= bet
-                if "casino" not in user:
-                    user["casino"] = {}
-                user["casino"]["bet_spent"] = True
-                users[user_id] = user
-                await save_users(users)
+            # ✅ УДАЛЕН блок bet_spent - больше не списываем здесь
             
             await callback.message.edit_text(
                 f"🎰 СЛОТЫ\n\n"
-                f"💰 Ставка: {bet:,.0f}₽ (списана)\n"
+                f"💰 Ставка: {bet:,.0f}₽\n"
                 f"💳 Ваш баланс: {user['money']:,.0f}₽\n\n"
                 f"Нажмите 'Крутить' для игры",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -282,6 +275,15 @@ def register_casino_handlers(dp):
             if bet <= 0:
                 await callback.answer("❌ Ставка не установлена!", show_alert=True)
                 return
+            
+            # ✅ СПИСЫВАЕМ СТАВКУ ПЕРЕД КАЖДЫМ ПРОКРУТОМ
+            if user["money"] < bet:
+                await callback.answer("❌ Недостаточно средств!", show_alert=True)
+                return
+            
+            user["money"] -= bet
+            users[user_id] = user
+            await save_users(users)
             
             symbols = ["🍒", "🍋", "🍊", "🍇", "💎", "7️⃣"]
             result = [random.choice(symbols) for _ in range(3)]
@@ -778,4 +780,4 @@ __all__ = [
     'mines_games',
     'get_min_mines_for_size',
     'register_casino_handlers'
-]
+                ]
