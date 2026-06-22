@@ -118,7 +118,11 @@ async def update_auction_lots(force: bool = False):
 async def auction_update_loop():
     """Цикл обновления аукциона"""
     global auction_running
+    
+    logger.info("🚗 AUCTION LOOP STARTED!")
+    
     while auction_running:
+        logger.info("🔄 Auction loop tick...")
         try:
             await update_auction_lots()
         except Exception as e:
