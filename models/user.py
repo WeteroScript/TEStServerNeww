@@ -9,7 +9,7 @@ class UserModel:
         """Возвращает дефолтного пользователя"""
         return {
             "money": 1000000,
-            "brcoins": 1000,
+            "brcoins": 0,
             "energy": 100,
             "total_earned": 0,
             "trades_count": 0,
@@ -44,7 +44,8 @@ class UserModel:
                 "mines_count": 4,
                 "field_size": 5
             },
-            "banned": False
+            "banned": False,
+            "frozen_balance": 0  # ← ЗАМОРОЖЕННЫЙ БАЛАНС
         }
     
     @staticmethod
