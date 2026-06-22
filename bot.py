@@ -25,7 +25,7 @@ async def main():
     logger.info(f"👑 Админы: {ADMIN_IDS}")
     
     # ==========================================
-    # ===== ВАЖНО! ПОРЯДОК РЕГИСТРАЦИИ =====
+    # ===== РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ =====
     # ==========================================
     # Сначала специфичные обработчики (с проверкой state)
     register_auction_handlers(dp)   # Ставки на аукцион
@@ -40,12 +40,16 @@ async def main():
     register_business_handlers(dp)
     
     try:
-        # Запускаем бизнес-цикл
+        # ==========================================
+        # ===== ЗАПУСК БИЗНЕС-ЦИКЛА (АВТО-СБОР) =====
+        # ==========================================
         business_running = True
         business_check_task = asyncio.create_task(check_business_loop())
         logger.info("🏢 Цикл проверки бизнесов запущен!")
         
-        # Запускаем цикл аукциона
+        # ==========================================
+        # ===== ЗАПУСК ЦИКЛА АУКЦИОНА =====
+        # ==========================================
         auction_running = True
         auction_task = asyncio.create_task(auction_update_loop())
         logger.info("🚗 Цикл обновления аукциона запущен!")
@@ -54,13 +58,18 @@ async def main():
         await update_auction_lots()
         logger.info("🚗 Аукцион инициализирован!")
         
-        # Запускаем промокоды если включены
+        # ==========================================
+        # ===== ЗАПУСК ПРОМОКОДОВ =====
+        # ==========================================
         settings = await load_settings()
         if settings.get("promo_auto", False):
             promo_running = True
             promo_task = asyncio.create_task(promo_auto_loop())
             logger.info("📢 Авто-промокоды запущены!")
         
+        # ==========================================
+        # ===== ЗАПУСК БОТА =====
+        # ==========================================
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
         
     except KeyboardInterrupt:
