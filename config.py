@@ -85,7 +85,7 @@ BUSINESS_CONFIG = {
         ],
         "min_resources": 1,
         "max_resources": 3,
-        "cooldown": 5
+        "cooldown": 5400
     },
     "tech_center": {
         "name": "Технический центр",
@@ -210,8 +210,8 @@ AUCTION_CARS = {
 # ========== НАСТРОЙКИ АУКЦИОНА ==========
 AUCTION_CONFIG = {
     "max_lots": 15,
-    "update_interval": 60,
-    "bid_timeout": 10,
+    "update_interval": 1800,
+    "bid_timeout": 1200,
     "default_start_bid": 1000000
 }
 
