@@ -97,9 +97,11 @@ def register_business_handlers(dp):
                     max_owners = config["max_owners"]
                     owners = len(business_data.get(key, {}).get("owners", []))
                     
+                    free_slots = max_owners - owners  # ← ИСПРАВЛЕНО!
+                    
                     text += f"{emoji} {name} - ❌ Не куплен\n"
                     text += f"   💰 Цена: {price:,.0f}₽\n"
-                    text += f"   👥 Свободно: {owners}/{max_owners}\n\n"
+                    text += f"   👥 Свободно: {free_slots}/{max_owners}\n\n"
                 
                 text += "⚠️ У вас нет бизнеса. Купите один из доступных!"
             
