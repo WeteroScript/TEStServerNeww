@@ -84,63 +84,80 @@ def register_business_handlers(dp):
             user_business_count = await get_user_business_count(user_id)
             status = await get_business_status(user_id)
             
-            text = "🏢 Ваши бизнесы\n\n"
-            
-            for key, config in BUSINESS_CONFIG.items():
-                s = status.get(key, {"owned": False, "ready": False, "remaining": "Не куплен", "auto_collect": False})
-                emoji = config["emoji"]
-                name = config["name"]
+            # ==========================================
+            # ===== ТЕКСТ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ БЕЗ БИЗНЕСА =====
+            # ==========================================
+            if user_business_count == 0:
+                text = "🏢 **Доступные бизнесы для покупки:**\n\n"
                 
-                if s["owned"]:
-                    auto_status = "🟢 Авто-сбор включен" if s["auto_collect"] else "🔴 Авто-сбор выключен"
-                    if s["ready"]:
-                        text += f"{emoji} {name} - ✅ ГОТОВ К СБОРУ\n"
-                    else:
-                        text += f"{emoji} {name} - ⏳ {s['remaining']}\n"
-                    text += f"   {auto_status}\n"
-                else:
+                for key, config in BUSINESS_CONFIG.items():
+                    emoji = config["emoji"]
+                    name = config["name"]
                     price = config["price"]
                     max_owners = config["max_owners"]
                     owners = len(business_data.get(key, {}).get("owners", []))
+                    
                     text += f"{emoji} {name} - ❌ Не куплен\n"
                     text += f"   💰 Цена: {price:,.0f}₽\n"
-                    text += f"   👥 Свободно: {max_owners - owners}/{max_owners}\n"
+                    text += f"   👥 Свободно: {owners}/{max_owners}\n\n"
+                
+                text += "⚠️ У вас нет бизнеса. Купите один из доступных!"
             
-            if user_business_count >= 1:
-                text += "\n⚠️ У вас уже есть 1 бизнес! (максимум 1)"
+            # ==========================================
+            # ===== ТЕКСТ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ С БИЗНЕСОМ =====
+            # ==========================================
+            else:
+                text = "🏢 **Ваш бизнес:**\n\n"
+                
+                for key, config in BUSINESS_CONFIG.items():
+                    s = status.get(key, {"owned": False, "ready": False, "remaining": "Не куплен", "auto_collect": False})
+                    
+                    if s["owned"]:
+                        emoji = config["emoji"]
+                        name = config["name"]
+                        price = config["price"]
+                        auto_status = "🟢 Включен" if s["auto_collect"] else "🔴 Выключен"
+                        ready_status = "✅ Готов к сбору" if s["ready"] else f"⏳ {s['remaining']}"
+                        
+                        text += f"{emoji} {name}\n"
+                        text += f"   💰 Цена: {price:,.0f}₽\n"
+                        text += f"   🔄 Авто-сбор: {auto_status}\n"
+                        text += f"   📊 Статус: {ready_status}\n\n"
             
+            # ==========================================
+            # ===== КНОПКИ =====
+            # ==========================================
             keyboard = []
             
-            if user_business_count < 1:
+            if user_business_count == 0:
+                # Показываем кнопки покупки всех бизнесов
                 for key, config in BUSINESS_CONFIG.items():
-                    s = status.get(key, {"owned": False})
-                    if not s["owned"]:
-                        owners = len(business_data.get(key, {}).get("owners", []))
-                        if owners < config["max_owners"]:
-                            keyboard.append([InlineKeyboardButton(
-                                text=f"💰 Купить {config['emoji']} {config['name']}",
-                                callback_data=f"buy_business_{key}"
-                            )])
+                    owners = len(business_data.get(key, {}).get("owners", []))
+                    if owners < config["max_owners"]:
+                        keyboard.append([InlineKeyboardButton(
+                            text=f"💰 Купить {config['emoji']} {config['name']}",
+                            callback_data=f"buy_business_{key}"
+                        )])
             else:
+                # Показываем кнопки управления для каждого бизнеса
                 for key, config in BUSINESS_CONFIG.items():
                     s = status.get(key, {"owned": False, "auto_collect": False})
                     if s["owned"]:
                         auto_text = "🔴 Выключить" if s["auto_collect"] else "🟢 Включить"
-                        callback_data = f"toggle_auto_{key}"
                         keyboard.append([InlineKeyboardButton(
                             text=f"{config['emoji']} {auto_text} авто-сбор {config['name']}",
-                            callback_data=callback_data
+                            callback_data=f"toggle_auto_{key}"
                         )])
-            
-            has_ready = any(s.get("ready", False) for s in status.values())
-            if has_ready:
-                keyboard.append([InlineKeyboardButton(
-                    text="💰 Собрать доход",
-                    callback_data="collect_business"
-                )])
-            
-            has_business = any(s.get("owned", False) for s in status.values())
-            if has_business:
+                
+                # Кнопка сбора дохода
+                has_ready = any(s.get("ready", False) for s in status.values())
+                if has_ready:
+                    keyboard.append([InlineKeyboardButton(
+                        text="💰 Собрать доход",
+                        callback_data="collect_business"
+                    )])
+                
+                # Кнопка продажи бизнеса
                 keyboard.append([InlineKeyboardButton(
                     text="💰 Продать бизнес (50%)",
                     callback_data="sell_business"
@@ -150,7 +167,8 @@ def register_business_handlers(dp):
             
             await callback.message.edit_text(
                 text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в business_menu: {e}")
@@ -291,7 +309,6 @@ def register_business_handlers(dp):
             return
         
         try:
-            # ✅ ИСПРАВЛЕНО: проверяем state перед clear()
             if state:
                 await state.clear()
             
@@ -313,7 +330,6 @@ def register_business_handlers(dp):
             new_status = not current_status
             user["business"][business_key]["auto_collect"] = new_status
             
-            # Если last_collect не установлен - устанавливаем сейчас
             if not user["business"][business_key].get("last_collect"):
                 user["business"][business_key]["last_collect"] = datetime.now().isoformat()
             
@@ -323,7 +339,6 @@ def register_business_handlers(dp):
             status_text = "включен" if new_status else "выключен"
             await callback.answer(f"✅ Авто-сбор для {config['name']} {status_text}!", show_alert=True)
             
-            # Обновляем меню бизнеса
             await business_menu(callback, state)
         except Exception as e:
             logger.error(f"Ошибка в toggle_auto_collect: {e}")
