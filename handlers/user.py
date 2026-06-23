@@ -13,7 +13,7 @@ from utils.helpers import (
     is_function_disabled, is_admin
 )
 from services.currency import currency_rates
-from handlers.casino import mines_games, get_min_mines_for_size
+from handlers.casino import mines_games, mines_games_by_id, get_min_mines_for_size
 from handlers.auction import show_auction_lot
 
 # States
