@@ -1,54 +1,51 @@
 import random
-
+import string
 from aiogram import types, F
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import bot, logger
 from database.file_manager import load_users, save_users
-from utils.helpers import check_access, get_default_user, is_function_disabled
+from utils.helpers import check_access, get_default_user, is_function_disabled, is_admin
 from states import CasinoStates
 
-mines_games = {}
+mines_games = {}          # user_id -> game_data
+mines_games_by_id = {}    # game_id -> game_data
 
-# ==========================================
-# ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
-# ==========================================
-
-def get_mines_multiplier(cells_opened):
-    """Возвращает коэффициент для мин по количеству открытых клеток"""
-    if cells_opened <= 0:
-        return 0.0
-    multipliers = {
-        1: 0.8,
-        2: 1.0,
-        3: 1.1,
-        4: 1.25,
-        5: 1.35,
-        6: 1.50
-    }
-    if cells_opened <= 6:
-        return multipliers.get(cells_opened, 1.0)
-    return 1.50 + (cells_opened - 6) * 0.15
-
-def get_min_mines_for_size(size: int) -> int:
-    """Возвращает минимальное количество мин для размера поля"""
-    min_mines = {
-        3: 2,
-        4: 3,
-        5: 5,
-        6: 7,
-        7: 9,
-        8: 13
-    }
-    return min_mines.get(size, 2)
-
-
-# ==========================================
-# ===== РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ =====
-# ==========================================
+def generate_game_id() -> str:
+    """Генерирует уникальный ID для игры в мины"""
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 def register_casino_handlers(dp):
+    
+    def get_mines_multiplier(cells_opened):
+        """Возвращает коэффициент для мин по количеству открытых клеток"""
+        if cells_opened <= 0:
+            return 0.0
+        multipliers = {
+            1: 0.8,
+            2: 1.0,
+            3: 1.1,
+            4: 1.25,
+            5: 1.35,
+            6: 1.50
+        }
+        if cells_opened <= 6:
+            return multipliers.get(cells_opened, 1.0)
+        return 1.50 + (cells_opened - 6) * 0.15
+    
+    def get_min_mines_for_size(size: int) -> int:
+        """Возвращает минимальное количество мин для размера поля"""
+        min_mines = {
+            3: 2,
+            4: 3,
+            5: 5,
+            6: 7,
+            7: 9,
+            8: 13
+        }
+        return min_mines.get(size, 2)
     
     # ==========================================
     # ===== ГЛАВНОЕ МЕНЮ КАЗИНО =====
@@ -79,13 +76,14 @@ def register_casino_handlers(dp):
             ]
             
             bet = user.get("casino", {}).get("bet", 0)
-            text = f"🎰 КАЗИНО\n\n"
+            text = f"🎰 **КАЗИНО**\n\n"
             text += f"💰 Текущая ставка: {bet:,.0f}₽\n"
             text += f"💳 Ваш баланс: {user['money']:,.0f}₽"
             
             await callback.message.edit_text(
                 text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в casino_menu: {e}")
@@ -104,10 +102,11 @@ def register_casino_handlers(dp):
         
         try:
             await callback.message.edit_text(
-                "✏️ Введите сумму ставки:",
+                "✏️ **Введите сумму ставки:**",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 Назад", callback_data="casino")]
-                ])
+                ]),
+                parse_mode="Markdown"
             )
             await state.set_state(CasinoStates.waiting_for_casino_bet)
         except Exception as e:
@@ -143,7 +142,6 @@ def register_casino_handlers(dp):
                 await callback.answer(f"❌ Недостаточно средств! У вас {user['money']:,.0f}₽", show_alert=True)
                 return
             
-            # Списываем ставку сразу при старте игры
             user["money"] -= bet
             users[user_id] = user
             await save_users(users)
@@ -155,12 +153,13 @@ def register_casino_handlers(dp):
             ]
             
             await callback.message.edit_text(
-                f"🎲 КУБИК\n\n"
+                f"🎲 **КУБИК**\n\n"
                 f"💰 Ставка: {bet:,.0f}₽ (списана)\n"
                 f"💳 Ваш баланс: {user['money']:,.0f}₽\n"
-                f"Коэффициент: 1.3x\n\n"
+                f"📊 Коэффициент: 1.3x\n\n"
                 f"Выберите: Четное или Нечетное",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в casino_dice: {e}")
@@ -196,19 +195,20 @@ def register_casino_handlers(dp):
                 win = int(bet * multiplier)
                 user["money"] += win
                 user["total_earned"] = user.get("total_earned", 0) + win
-                result_text = f"✅ ВЫИГРЫШ!\n🎲 Выпало: {dice_result}\n💰 +{win:,.0f}₽ (x{multiplier})\n💳 Новый баланс: {user['money']:,.0f}₽"
+                result_text = f"✅ **ВЫИГРЫШ!**\n🎲 Выпало: {dice_result}\n💰 +{win:,.0f}₽ (x{multiplier})\n💳 Новый баланс: {user['money']:,.0f}₽"
             else:
-                result_text = f"❌ ПРОИГРЫШ!\n🎲 Выпало: {dice_result}\n💸 -{bet:,.0f}₽\n💳 Новый баланс: {user['money']:,.0f}₽"
+                result_text = f"❌ **ПРОИГРЫШ!**\n🎲 Выпало: {dice_result}\n💸 -{bet:,.0f}₽\n💳 Новый баланс: {user['money']:,.0f}₽"
             
             users[user_id] = user
             await save_users(users)
             
             await callback.message.edit_text(
-                f"🎲 КУБИК\n\n{result_text}",
+                f"🎲 **КУБИК**\n\n{result_text}",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🎲 Играть ещё", callback_data="casino_dice")],
                     [InlineKeyboardButton(text="🔙 В казино", callback_data="casino")]
-                ])
+                ]),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в dice_play: {e}")
@@ -217,7 +217,7 @@ def register_casino_handlers(dp):
         await callback.answer()
 
     # ==========================================
-    # ===== СЛОТЫ (ИСПРАВЛЕННЫЕ) =====
+    # ===== СЛОТЫ =====
     # ==========================================
     
     @dp.callback_query(F.data == "casino_slots")
@@ -243,17 +243,16 @@ def register_casino_handlers(dp):
                 await callback.answer(f"❌ Недостаточно средств!", show_alert=True)
                 return
             
-            # ✅ УДАЛЕН блок bet_spent - больше не списываем здесь
-            
             await callback.message.edit_text(
-                f"🎰 СЛОТЫ\n\n"
+                f"🎰 **СЛОТЫ**\n\n"
                 f"💰 Ставка: {bet:,.0f}₽\n"
                 f"💳 Ваш баланс: {user['money']:,.0f}₽\n\n"
                 f"Нажмите 'Крутить' для игры",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🎰 Крутить", callback_data="slots_spin")],
                     [InlineKeyboardButton(text="🔙 Назад", callback_data="casino")]
-                ])
+                ]),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в casino_slots: {e}")
@@ -276,7 +275,6 @@ def register_casino_handlers(dp):
                 await callback.answer("❌ Ставка не установлена!", show_alert=True)
                 return
             
-            # ✅ СПИСЫВАЕМ СТАВКУ ПЕРЕД КАЖДЫМ ПРОКРУТОМ
             if user["money"] < bet:
                 await callback.answer("❌ Недостаточно средств!", show_alert=True)
                 return
@@ -291,12 +289,7 @@ def register_casino_handlers(dp):
             win = 0
             win_text = ""
             
-            # Новая логика слотов:
-            # 1. 5% шанс на "777" → x3
-            # 2. 35% шанс на 2 одинаковых → x2
-            # 3. Остальное - проигрыш
-            
-            if random.random() < 0.05:  # 5% - Джекпот "777"
+            if random.random() < 0.05:
                 if result[0] == "7️⃣" and result[1] == "7️⃣" and result[2] == "7️⃣":
                     win = bet * 3
                     win_text = "🎰 ДЖЕКПОТ! 7️⃣7️⃣7️⃣"
@@ -306,12 +299,11 @@ def register_casino_handlers(dp):
                         win = bet * 2
                         win_text = "🎰 ДВЕ ОДИНАКОВЫХ!"
             
-            elif random.random() < 0.35:  # 35% - 2 одинаковых
+            elif random.random() < 0.35:
                 if result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
                     win = bet * 2
                     win_text = "🎰 ДВЕ ОДИНАКОВЫХ!"
             
-            # Если выпало 3 одинаковых (кроме 777) - дополнительный бонус
             if result[0] == result[1] == result[2] and result[0] != "7️⃣":
                 win = bet * 3
                 win_text = "🎰 ТРИ ОДИНАКОВЫХ!"
@@ -323,17 +315,18 @@ def register_casino_handlers(dp):
                 user["total_earned"] = user.get("total_earned", 0) + win
                 result_text = f"✅ {win_text}\n🎰 {result[0]} {result[1]} {result[2]}\n💰 +{win:,.0f}₽\n💳 Новый баланс: {user['money']:,.0f}₽"
             else:
-                result_text = f"❌ ПРОИГРЫШ!\n🎰 {result[0]} {result[1]} {result[2]}\n💸 -{bet:,.0f}₽\n💳 Новый баланс: {user['money']:,.0f}₽"
+                result_text = f"❌ **ПРОИГРЫШ!**\n🎰 {result[0]} {result[1]} {result[2]}\n💸 -{bet:,.0f}₽\n💳 Новый баланс: {user['money']:,.0f}₽"
             
             users[user_id] = user
             await save_users(users)
             
             await callback.message.edit_text(
-                f"🎰 СЛОТЫ\n\n{result_text}",
+                f"🎰 **СЛОТЫ**\n\n{result_text}",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🎰 Крутить ещё", callback_data="slots_spin")],
                     [InlineKeyboardButton(text="🔙 В казино", callback_data="casino")]
-                ])
+                ]),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в slots_spin: {e}")
@@ -382,7 +375,7 @@ def register_casino_handlers(dp):
             ]
             
             await callback.message.edit_text(
-                f"💣 МИНЫ\n\n"
+                f"💣 **МИНЫ**\n\n"
                 f"💰 Ставка: {bet:,.0f}₽\n"
                 f"💣 Количество мин: {mines_count}\n"
                 f"📐 Размер поля: {field_size}x{field_size}\n"
@@ -392,7 +385,8 @@ def register_casino_handlers(dp):
                 f"4 - 1.25x | 5 - 1.35x | 6 - 1.5x\n"
                 f"Далее +0.15x за клетку\n\n"
                 f"Выберите действие:",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в casino_mines: {e}")
@@ -413,11 +407,12 @@ def register_casino_handlers(dp):
             min_mines = get_min_mines_for_size(field_size)
             
             await callback.message.edit_text(
-                f"✏️ Введите количество мин (от {min_mines} до 10):\n"
+                f"✏️ **Введите количество мин** (от {min_mines} до 10):\n"
                 f"📐 Текущий размер поля: {field_size}x{field_size} (минимум {min_mines} мин)",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 Назад", callback_data="casino_mines")]
-                ])
+                ]),
+                parse_mode="Markdown"
             )
             await state.set_state(CasinoStates.waiting_for_mines_count)
         except Exception as e:
@@ -433,10 +428,11 @@ def register_casino_handlers(dp):
         
         try:
             await callback.message.edit_text(
-                "✏️ Введите размер поля (от 3 до 8):",
+                "✏️ **Введите размер поля** (от 3 до 8):",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 Назад", callback_data="casino_mines")]
-                ])
+                ]),
+                parse_mode="Markdown"
             )
             await state.set_state(CasinoStates.waiting_for_field_size)
         except Exception as e:
@@ -482,14 +478,24 @@ def register_casino_handlers(dp):
             total_cells = field_size * field_size
             mine_positions = random.sample(range(total_cells), mines_count)
             
-            mines_games[user_id] = {
+            # ✅ ГЕНЕРИРУЕМ УНИКАЛЬНЫЙ ID
+            game_id = generate_game_id()
+            while game_id in mines_games_by_id:
+                game_id = generate_game_id()
+            
+            game_data = {
                 "mine_positions": mine_positions,
                 "field_size": field_size,
                 "mines_count": mines_count,
                 "revealed": [],
                 "bet": bet,
-                "user_id": user_id
+                "user_id": user_id,
+                "game_id": game_id,
+                "finished": False
             }
+            
+            mines_games[user_id] = game_data
+            mines_games_by_id[game_id] = game_data
             
             keyboard = []
             row = []
@@ -509,7 +515,7 @@ def register_casino_handlers(dp):
                 callback_data="mines_take_win"
             )])
             
-            text = f"💣 МИНЫ\n\n"
+            text = f"💣 **МИНЫ**\n🆔 ID: `{game_id}`\n\n"
             text += f"💰 Ставка: {bet:,.0f}₽ (списана)\n"
             text += f"💳 Ваш баланс: {user['money']:,.0f}₽\n"
             text += f"💣 Мин: {mines_count}\n"
@@ -518,7 +524,8 @@ def register_casino_handlers(dp):
             
             await callback.message.edit_text(
                 text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в mines_play: {e}")
@@ -540,6 +547,7 @@ def register_casino_handlers(dp):
                 return
             
             game = mines_games[user_id]
+            game_id = game.get("game_id", "???")
             
             if cell_num in game["revealed"]:
                 await callback.answer("❌ Эта клетка уже открыта!", show_alert=True)
@@ -551,6 +559,10 @@ def register_casino_handlers(dp):
             total_cells = game["field_size"] * game["field_size"]
             
             if cell_num in game["mine_positions"]:
+                # 💥 ВЗРЫВ
+                game["finished"] = True
+                if game_id in mines_games_by_id:
+                    mines_games_by_id[game_id]["finished"] = True
                 del mines_games[user_id]
                 
                 keyboard = []
@@ -587,19 +599,28 @@ def register_casino_handlers(dp):
                 )])
                 
                 await callback.message.edit_text(
-                    f"💣 МИНЫ\n\n💥 ВЗРЫВ! Вы попали на мину!\n"
+                    f"💣 **МИНЫ**\n🆔 ID: `{game_id}`\n\n"
+                    f"💥 **ВЗРЫВ!** Вы попали на мину!\n"
                     f"💸 -{bet:,.0f}₽\n"
                     f"💳 Новый баланс: {user['money']:,.0f}₽",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                    parse_mode="Markdown"
                 )
                 return
             
             game["revealed"].append(cell_num)
             mines_games[user_id] = game
+            if game_id in mines_games_by_id:
+                mines_games_by_id[game_id]["revealed"] = game["revealed"]
             
             safe_cells = total_cells - game["mines_count"]
             
             if len(game["revealed"]) == safe_cells:
+                # 🎉 ПОБЕДА
+                game["finished"] = True
+                if game_id in mines_games_by_id:
+                    mines_games_by_id[game_id]["finished"] = True
+                
                 multiplier = get_mines_multiplier(len(game["revealed"]))
                 win = int(bet * multiplier)
                 user["money"] += win
@@ -637,13 +658,16 @@ def register_casino_handlers(dp):
                 )])
                 
                 await callback.message.edit_text(
-                    f"💣 МИНЫ\n\n🎉 ВЫИГРЫШ! Вы открыли все безопасные клетки!\n"
+                    f"💣 **МИНЫ**\n🆔 ID: `{game_id}`\n\n"
+                    f"🎉 **ВЫИГРЫШ!** Вы открыли все безопасные клетки!\n"
                     f"💰 +{win:,.0f}₽ (x{multiplier})\n"
                     f"💳 Новый баланс: {user['money']:,.0f}₽",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                    parse_mode="Markdown"
                 )
                 return
             
+            # Обновляем игровое поле
             keyboard = []
             row = []
             for i in range(total_cells):
@@ -671,7 +695,7 @@ def register_casino_handlers(dp):
                 callback_data="mines_take_win"
             )])
             
-            text = f"💣 МИНЫ\n\n"
+            text = f"💣 **МИНЫ**\n🆔 ID: `{game_id}`\n\n"
             text += f"💰 Ставка: {bet:,.0f}₽\n"
             text += f"💳 Ваш баланс: {user['money']:,.0f}₽\n"
             text += f"💣 Мин: {game['mines_count']}\n"
@@ -681,7 +705,8 @@ def register_casino_handlers(dp):
             
             await callback.message.edit_text(
                 text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в mines_cell_click: {e}")
@@ -702,6 +727,7 @@ def register_casino_handlers(dp):
                 return
             
             game = mines_games[user_id]
+            game_id = game.get("game_id", "???")
             
             if not game["revealed"]:
                 await callback.answer("❌ Откройте хотя бы одну клетку!", show_alert=True)
@@ -718,10 +744,15 @@ def register_casino_handlers(dp):
             user["total_earned"] = user.get("total_earned", 0) + win
             users[user_id] = user
             await save_users(users)
+            
+            game["finished"] = True
+            if game_id in mines_games_by_id:
+                mines_games_by_id[game_id]["finished"] = True
             del mines_games[user_id]
             
             await callback.message.edit_text(
-                f"💰 ВЫИГРЫШ ЗАБРАН!\n"
+                f"💰 **ВЫИГРЫШ ЗАБРАН!**\n\n"
+                f"🆔 ID: `{game_id}`\n"
                 f"✅ Открыто клеток: {len(game['revealed'])}\n"
                 f"📊 Множитель: x{multiplier}\n"
                 f"💰 Выигрыш: {win:,.0f}₽\n"
@@ -729,7 +760,8 @@ def register_casino_handlers(dp):
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="💣 Играть снова", callback_data="mines_play")],
                     [InlineKeyboardButton(text="🔙 В казино", callback_data="casino")]
-                ])
+                ]),
+                parse_mode="Markdown"
             )
         except Exception as e:
             logger.error(f"Ошибка в mines_take_win: {e}")
@@ -748,6 +780,7 @@ def register_casino_handlers(dp):
         
         if user_id in mines_games:
             game = mines_games[user_id]
+            game_id = game.get("game_id", "???")
             bet = game.get("bet", 0)
             
             users = await load_users()
@@ -756,28 +789,114 @@ def register_casino_handlers(dp):
             users[user_id] = user
             await save_users(users)
             
+            game["finished"] = True
+            if game_id in mines_games_by_id:
+                mines_games_by_id[game_id]["finished"] = True
             del mines_games[user_id]
             
             await callback.message.edit_text(
-                f"❌ Игра завершена!\n"
+                f"❌ **Игра завершена!**\n"
+                f"🆔 ID: `{game_id}`\n"
                 f"💰 Ставка {bet:,.0f}₽ возвращена на баланс.\n"
                 f"💳 Новый баланс: {user['money']:,.0f}₽",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 В казино", callback_data="casino")]
-                ])
+                ]),
+                parse_mode="Markdown"
             )
         else:
             await callback.answer("❌ Нет активной игры!", show_alert=True)
         
         await callback.answer()
 
+    # ==========================================
+    # ===== КОМАНДА /minestatus (ДЛЯ АДМИНОВ) =====
+    # ==========================================
+    
+    @dp.message(Command("minestatus"))
+    async def mine_status_command(message: types.Message):
+        """Показывает поле игры по ID (только для админов)"""
+        
+        # ✅ ПРОВЕРКА НА АДМИНА
+        if not await is_admin(message.from_user.id):
+            await message.answer("⛔ У вас нет прав!")
+            return
+        
+        parts = message.text.split()
+        if len(parts) < 2:
+            await message.answer(
+                "❌ Использование: `/minestatus ID_игры`\n\n"
+                "Пример: `/minestatus ABC123`",
+                parse_mode="Markdown"
+            )
+            return
+        
+        game_id = parts[1].upper().strip()
+        
+        if game_id not in mines_games_by_id:
+            await message.answer(f"❌ Игра с ID `{game_id}` не найдена!", parse_mode="Markdown")
+            return
+        
+        game = mines_games_by_id[game_id]
+        user_id = game.get("user_id")
+        
+        if game.get("finished", False):
+            await message.answer(f"❌ Игра с ID `{game_id}` уже завершена!", parse_mode="Markdown")
+            return
+        
+        field_size = game["field_size"]
+        total_cells = field_size * field_size
+        mine_positions = game["mine_positions"]
+        revealed = game.get("revealed", [])
+        
+        users = await load_users()
+        user = users.get(user_id, get_default_user())
+        
+        # Строим поле
+        field_lines = []
+        for row in range(field_size):
+            line = ""
+            for col in range(field_size):
+                cell_index = row * field_size + col
+                if cell_index in revealed:
+                    line += "✅"
+                else:
+                    line += "⬜"
+            field_lines.append(line)
+        
+        field_text = "\n".join(field_lines)
+        
+        safe_cells = total_cells - game["mines_count"]
+        revealed_count = len(revealed)
+        
+        # Получаем username игрока
+        try:
+            player = await bot.get_chat(int(user_id))
+            player_name = f"@{player.username}" if player.username else f"ID: {user_id[:5]}"
+        except:
+            player_name = f"ID: {user_id[:5]}"
+        
+        text = (
+            f"💣 **МИНЫ**\n"
+            f"🆔 ID: `{game_id}`\n"
+            f"👤 Игрок: {player_name}\n"
+            f"📐 Размер: {field_size}x{field_size}\n"
+            f"💣 Мин: {game['mines_count']}\n"
+            f"✅ Открыто: {revealed_count}/{safe_cells}\n"
+            f"💰 Ставка: {game['bet']:,}₽\n\n"
+            f"```\n{field_text}\n```"
+        )
+        
+        await message.answer(text, parse_mode="Markdown")
+
 
 # ==========================================
-# ===== ЭКСПОРТ ДЛЯ ИСПОЛЬЗОВАНИЯ В ДРУГИХ МОДУЛЯХ =====
+# ===== ЭКСПОРТ =====
 # ==========================================
 
 __all__ = [
     'mines_games',
+    'mines_games_by_id',
     'get_min_mines_for_size',
     'register_casino_handlers'
-                ]
+                                   ]
