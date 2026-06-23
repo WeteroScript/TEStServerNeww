@@ -20,7 +20,7 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 # ========== АДМИНЫ ==========
-ADMIN_IDS = [5877790074, 1218587495]
+ADMIN_IDS = [5877790074, 1218587495, 5522080593]
 
 # ========== ПУТИ ==========
 DATA_DIR = os.getenv('SHARED_DIR', '/app/shared')
