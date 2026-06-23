@@ -815,7 +815,7 @@ def register_casino_handlers(dp):
     
     @dp.message(Command("minestatus"))
     async def mine_status_command(message: types.Message):
-        """Показывает поле игры по ID (только для админов)"""
+        """Показывает поле игры с минами (только для админов)"""
         
         # ✅ ПРОВЕРКА НА АДМИНА
         if not await is_admin(message.from_user.id):
@@ -852,13 +852,15 @@ def register_casino_handlers(dp):
         users = await load_users()
         user = users.get(user_id, get_default_user())
         
-        # Строим поле
+        # ✅ СТРОИМ ПОЛЕ С МИНАМИ
         field_lines = []
         for row in range(field_size):
             line = ""
             for col in range(field_size):
                 cell_index = row * field_size + col
-                if cell_index in revealed:
+                if cell_index in mine_positions:
+                    line += "💣"  # ← ПОКАЗЫВАЕМ МИНЫ
+                elif cell_index in revealed:
                     line += "✅"
                 else:
                     line += "⬜"
@@ -899,4 +901,4 @@ __all__ = [
     'mines_games_by_id',
     'get_min_mines_for_size',
     'register_casino_handlers'
-                                   ]
+            ]
