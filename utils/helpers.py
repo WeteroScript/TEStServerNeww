@@ -81,9 +81,10 @@ def get_rarity_color(rarity: str) -> str:
 # ===== РЕФЕРАЛЬНАЯ СИСТЕМА =====
 # ==========================================
 
-def generate_referral_link(user_id: str) -> str:
+async def generate_referral_link(user_id: str) -> str:  # ← ДОБАВИЛИ async
     """Генерирует реферальную ссылку"""
-    return f"https://t.me/WeteroRussia_bot?start=ref_{user_id}"
+    me = await bot.get_me()
+    return f"https://t.me/{me.username}?start=ref_{user_id}"
 
 def generate_captcha() -> Tuple[str, list]:
     """Генерирует капчу: (правильный_эмодзи, список_эмодзи)"""
