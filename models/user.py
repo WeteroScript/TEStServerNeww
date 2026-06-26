@@ -16,7 +16,6 @@ class UserModel:
             "role": "user",
             "donate_spent": 0,
             "donate_received": 0,
-            "inventory": [],
             "mine_attempts": 100,
             "last_mine_reset": datetime.now().isoformat(),
             "portfolio": {
@@ -46,7 +45,6 @@ class UserModel:
             },
             "banned": False,
             "frozen_balance": 0,
-            # ===== НОВЫЕ ПОЛЯ =====
             "referrer": None,
             "referrals": [],
             "referral_count": 0,
