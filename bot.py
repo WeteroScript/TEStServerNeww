@@ -42,8 +42,8 @@ async def main():
         # ==========================================
         # ===== ЗАПУСК ЦИКЛА АУКЦИОНА =====
         # ==========================================
-        auction.auction_running = True  # ← ПРАВИЛЬНО!
-        auction.auction_update_task = asyncio.create_task(auction.auction_update_loop())  # ← ПРАВИЛЬНО!
+        auction.auction_running = True
+        auction.auction_update_task = asyncio.create_task(auction.auction_update_loop())
         logger.info("🚗 Цикл обновления аукциона запущен!")
         
         # Инициализируем аукцион
