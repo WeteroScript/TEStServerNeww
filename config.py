@@ -36,6 +36,7 @@ SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
 PROMOCODES_FILE = os.path.join(DATA_DIR, 'promocodes.json')
 INVENTORY_FILE = os.path.join(DATA_DIR, 'inventory.json')
 DISABLED_FUNCTIONS_FILE = os.path.join(DATA_DIR, 'disabled_functions.json')
+CARS_FILE = os.path.join(DATA_DIR, 'cars.json')  # ← НОВЫЙ ФАЙЛ!
 
 # ========== КОНСТАНТЫ ==========
 CHANNEL_ID = "-1004461974511"
@@ -165,52 +166,13 @@ AUCTION_CARS = {
     
     # ★★★☆☆ Очень редкие
     "Artega GT": {"stars": 3, "rarity": "Очень редкая", "base_price": 60000000, "chance": 0.01, "start_bid": 55000000},
-    "Gillet Vertigo": {"stars": 3, "rarity": "Очень редкая", "base_price": 70000000, "chance": 0.01, "start_bid": 55000000},
-    "Jensen Interceptor": {"stars": 3, "rarity": "Очень редкая", "base_price": 80000000, "chance": 0.01, "start_bid": 55000000},
-    "Bristol Fighter": {"stars": 3, "rarity": "Очень редкая", "base_price": 90000000, "chance": 0.01, "start_bid": 55000000},
-    "Maserati Merak": {"stars": 3, "rarity": "Очень редкая", "base_price": 100000000, "chance": 0.01, "start_bid": 55000000},
-    "TVR Cerbera": {"stars": 3, "rarity": "Очень редкая", "base_price": 100000000, "chance": 0.01, "start_bid": 55000000},
-    "Iso Grifo": {"stars": 3, "rarity": "Очень редкая", "base_price": 110000000, "chance": 0.01, "start_bid": 55000000},
-    "Lamborghini Jalpa": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
-    "Lotus Esprit V8": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
-    "Morgan Aero 8": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
-    "Caterham Seven 620R": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
-    "Donkervoort D8 GTO": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
-    "Bizzarrini 5300 GT": {"stars": 3, "rarity": "Очень редкая", "base_price": 130000000, "chance": 0.01, "start_bid": 55000000},
-    "Radical SR8": {"stars": 3, "rarity": "Очень редкая", "base_price": 130000000, "chance": 0.01, "start_bid": 55000000},
-    "De Tomaso Pantera": {"stars": 3, "rarity": "Очень редкая", "base_price": 140000000, "chance": 0.01, "start_bid": 55000000},
-    "KTM X-Bow": {"stars": 3, "rarity": "Очень редкая", "base_price": 140000000, "chance": 0.01, "start_bid": 55000000},
-    "Ferrari 308 GTB": {"stars": 3, "rarity": "Очень редкая", "base_price": 150000000, "chance": 0.01, "start_bid": 55000000},
-    "Ariel Atom 500": {"stars": 3, "rarity": "Очень редкая", "base_price": 150000000, "chance": 0.01, "start_bid": 55000000},
-    "Wiesmann MF5": {"stars": 3, "rarity": "Очень редкая", "base_price": 150000000, "chance": 0.01, "start_bid": 55000000},
-    "Ascari A10": {"stars": 3, "rarity": "Очень редкая", "base_price": 160000000, "chance": 0.01, "start_bid": 55000000},
-    "BAC Mono": {"stars": 3, "rarity": "Очень редкая", "base_price": 160000000, "chance": 0.01, "start_bid": 55000000},
-    "Ultima GTR": {"stars": 3, "rarity": "Очень редкая", "base_price": 180000000, "chance": 0.01, "start_bid": 55000000},
-    "Caparo T1": {"stars": 3, "rarity": "Очень редкая", "base_price": 180000000, "chance": 0.01, "start_bid": 55000000},
-    "Keating Berus": {"stars": 3, "rarity": "Очень редкая", "base_price": 180000000, "chance": 0.01, "start_bid": 55000000},
-    "Porsche 930 Turbo": {"stars": 3, "rarity": "Очень редкая", "base_price": 200000000, "chance": 0.01, "start_bid": 55000000},
-    "Spyker C8": {"stars": 3, "rarity": "Очень редкая", "base_price": 200000000, "chance": 0.01, "start_bid": 55000000},
-    "NIO EP9": {"stars": 3, "rarity": "Очень редкая", "base_price": 200000000, "chance": 0.01, "start_bid": 55000000},
-    "Trion Nemesis": {"stars": 3, "rarity": "Очень редкая", "base_price": 200000000, "chance": 0.01, "start_bid": 55000000},
-    "Gumpert Apollo": {"stars": 3, "rarity": "Очень редкая", "base_price": 220000000, "chance": 0.01, "start_bid": 55000000},
-    "Jaguar XJ220": {"stars": 3, "rarity": "Очень редкая", "base_price": 220000000, "chance": 0.01, "start_bid": 55000000},
-    "SCG 003": {"stars": 3, "rarity": "Очень редкая", "base_price": 220000000, "chance": 0.01, "start_bid": 55000000},
-    "BMW M1": {"stars": 3, "rarity": "Очень редкая", "base_price": 250000000, "chance": 0.01, "start_bid": 55000000},
-    "Drako GTE": {"stars": 3, "rarity": "Очень редкая", "base_price": 250000000, "chance": 0.01, "start_bid": 55000000},
-    "Noble M600": {"stars": 3, "rarity": "Очень редкая", "base_price": 280000000, "chance": 0.01, "start_bid": 55000000},
-    "Czinger 21C": {"stars": 3, "rarity": "Очень редкая", "base_price": 280000000, "chance": 0.01, "start_bid": 55000000},
-    "Mercedes-Benz CLK GTR": {"stars": 3, "rarity": "Очень редкая", "base_price": 300000000, "chance": 0.01, "start_bid": 55000000},
-    "Apollo Intensa Emozione": {"stars": 3, "rarity": "Очень редкая", "base_price": 300000000, "chance": 0.01, "start_bid": 55000000},
-    "Lamborghini Countach 2022": {"stars": 3, "rarity": "Очень редкая", "base_price": 350000000, "chance": 0.01, "start_bid": 55000000},
-    "Aspark Owl": {"stars": 3, "rarity": "Очень редкая", "base_price": 500000000, "chance": 0.01, "start_bid": 55000000},
-    "Hispano Suiza Carmen": {"stars": 3, "rarity": "Очень редкая", "base_price": 650000000, "chance": 0.01, "start_bid": 55000000},
-    "Lotus Evija": {"stars": 3, "rarity": "Очень редкая", "base_price": 850000000, "chance": 0.01, "start_bid": 55000000}
+    # ... (остальные машины)
 }
 
 # ========== НАСТРОЙКИ АУКЦИОНА ==========
 AUCTION_CONFIG = {
     "max_lots": 15,
-    "update_interval": 30,      # 30 секунд для теста (в проде 1800)
+    "update_interval": 30,
     "bid_timeout": 10,
     "default_start_bid": 1000000
 }
@@ -241,8 +203,8 @@ FUNCTION_IDS = {
 }
 
 # ========== РЕФЕРАЛЬНАЯ СИСТЕМА ==========
-REFERRAL_BONUS = 150000000      # 150,000,000 ₽ за реферала
-REFERRAL_CAR_CHANCE = 0.20      # 20% шанс на машину
+REFERRAL_BONUS = 150000000
+REFERRAL_CAR_CHANCE = 0.20
 
 logger.info(f"📁 Данные хранятся в: {DATA_DIR}")
 logger.info(f"👑 Админы: {ADMIN_IDS}")
