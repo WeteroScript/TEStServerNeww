@@ -6,7 +6,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import bot, logger, ADMIN_IDS
 from database.file_manager import (
     load_users, save_users, load_inventory, save_inventory,
-    load_promocodes, save_promocodes, load_settings
+    load_promocodes, save_promocodes, load_settings,
+    get_user_cars, remove_user_car
 )
 from utils.helpers import (
     check_access, get_default_user, check_subscription,
@@ -67,11 +68,11 @@ def register_user_handlers(dp):
         return text, InlineKeyboardMarkup(inline_keyboard=keyboard)
     
     # ==========================================
-    # ===== START С КАПЧЕЙ =====
+    # ===== START С ИСПРАВЛЕННОЙ КАПЧЕЙ =====
     # ==========================================
     
     @dp.message(Command("start"))
-    async def start_command(message: types.Message, state: FSMContext):  # ← ДОБАВИЛИ state
+    async def start_command(message: types.Message, state: FSMContext):
         user_id = str(message.from_user.id)
         
         try:
@@ -86,7 +87,7 @@ def register_user_handlers(dp):
             
             users = await load_users()
             
-            # ✅ Проверяем реферальную ссылку
+            # Проверяем реферальную ссылку
             referrer_id = None
             if " " in message.text:
                 parts = message.text.split()
@@ -95,25 +96,34 @@ def register_user_handlers(dp):
             
             # ✅ Если пользователь НОВЫЙ
             if user_id not in users:
-                # ✅ Показываем капчу
                 correct_emoji, emojis = generate_captcha()
+                
+                # ✅ Сохраняем правильный эмодзи
+                await state.update_data(
+                    captcha_correct=correct_emoji,
+                    captcha_referrer=referrer_id
+                )
+                
+                # ✅ Кнопки с callback, где передаётся ВЫБРАННЫЙ эмодзи
+                keyboard = []
+                row = []
+                for i, e in enumerate(emojis):
+                    row.append(InlineKeyboardButton(
+                        text=e,
+                        callback_data=f"captcha_{e}"  # ← ТОЛЬКО ЭМОДЗИ!
+                    ))
+                    if len(row) == 3:
+                        keyboard.append(row)
+                        row = []
+                if row:
+                    keyboard.append(row)
                 
                 await message.answer(
                     f"🛡️ **Добро пожаловать в WeteroRussia!** 😉\n\n"
                     f"Чтобы пользоваться ботом, пройдите капчу.\n"
                     f"Выберите верный эмодзи: **{correct_emoji}**",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text=e, callback_data=f"captcha_{i}_{correct_emoji}") 
-                         for i, e in enumerate(emojis[:3])],
-                        [InlineKeyboardButton(text=e, callback_data=f"captcha_{i}_{correct_emoji}") 
-                         for i, e in enumerate(emojis[3:6])]
-                    ]),
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
                     parse_mode="Markdown"
-                )
-                
-                await state.update_data(
-                    captcha_correct=correct_emoji,
-                    captcha_referrer=referrer_id
                 )
                 return
             
@@ -148,7 +158,7 @@ def register_user_handlers(dp):
             await message.answer("⚠️ Произошла ошибка. Попробуйте позже.")
     
     # ==========================================
-    # ===== ОБРАБОТЧИК КАПЧИ =====
+    # ===== ИСПРАВЛЕННЫЙ ОБРАБОТЧИК КАПЧИ =====
     # ==========================================
     
     @dp.callback_query(F.data.startswith("captcha_"))
@@ -156,31 +166,26 @@ def register_user_handlers(dp):
         user_id = str(callback.from_user.id)
         
         try:
-            parts = callback.data.split("_")
-            index = int(parts[1])
-            correct_emoji = parts[2]
+            # ✅ Получаем выбранный эмодзи
+            selected_emoji = callback.data.replace("captcha_", "")
             
-            # Получаем данные из state
             data = await state.get_data()
-            stored_correct = data.get("captcha_correct")
+            correct_emoji = data.get("captcha_correct")
             referrer_id = data.get("captcha_referrer")
             
-            # Проверяем правильность
-            if callback.data.endswith(correct_emoji):
+            # ✅ Сравниваем выбранный с правильным
+            if selected_emoji == correct_emoji:
                 # ✅ Капча пройдена
                 users = await load_users()
                 
-                # Создаём пользователя
                 new_user = get_default_user()
                 new_user["captcha_passed"] = True
                 
                 if referrer_id and referrer_id in users:
-                    # ✅ Применяем рефералку
                     new_user["referrer"] = referrer_id
                     users[referrer_id]["referrals"].append(user_id)
                     users[referrer_id]["referral_count"] += 1
                     
-                    # Выдаём награду рефереру
                     referrer, reward_text = get_referral_reward(referrer_id, users)
                     users[referrer_id] = referrer
                     
@@ -197,7 +202,6 @@ def register_user_handlers(dp):
                     except Exception as e:
                         logger.warning(f"Не удалось уведомить реферера: {e}")
                 
-                # Сохраняем нового пользователя
                 users[user_id] = new_user
                 await save_users(users)
                 await state.clear()
@@ -218,15 +222,23 @@ def register_user_handlers(dp):
                 correct_emoji, emojis = generate_captcha()
                 await state.update_data(captcha_correct=correct_emoji)
                 
+                keyboard = []
+                row = []
+                for i, e in enumerate(emojis):
+                    row.append(InlineKeyboardButton(
+                        text=e,
+                        callback_data=f"captcha_{e}"
+                    ))
+                    if len(row) == 3:
+                        keyboard.append(row)
+                        row = []
+                if row:
+                    keyboard.append(row)
+                
                 await callback.message.edit_text(
                     f"🛡️ **Попробуйте ещё раз!**\n\n"
                     f"Выберите верный эмодзи: **{correct_emoji}**",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text=e, callback_data=f"captcha_{i}_{correct_emoji}") 
-                         for i, e in enumerate(emojis[:3])],
-                        [InlineKeyboardButton(text=e, callback_data=f"captcha_{i}_{correct_emoji}") 
-                         for i, e in enumerate(emojis[3:6])]
-                    ]),
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
                     parse_mode="Markdown"
                 )
             
@@ -308,7 +320,6 @@ def register_user_handlers(dp):
             referrals = user.get("referrals", [])
             referral_count = user.get("referral_count", 0)
             
-            # Собираем никнеймы приглашённых
             referral_names = []
             for ref_id in referrals[:10]:
                 try:
@@ -320,7 +331,6 @@ def register_user_handlers(dp):
             
             referral_list = "\n".join([f"• {name}" for name in referral_names]) if referral_names else "Нет приглашённых"
             
-            # ✅ Генерируем ссылку через await
             link = await generate_referral_link(user_id)
             
             text = (
@@ -355,7 +365,7 @@ def register_user_handlers(dp):
         
         try:
             user_id = str(callback.from_user.id)
-            link = await generate_referral_link(user_id)  # ← await!
+            link = await generate_referral_link(user_id)
             
             await callback.message.answer(
                 f"🔗 **Ваша реферальная ссылка:**\n\n"
@@ -393,6 +403,8 @@ def register_user_handlers(dp):
             user_id = str(callback.from_user.id)
             resources_count = len(inventory.get(user_id, []))
             
+            cars = await get_user_cars(user_id)
+            
             business_count = sum(1 for biz in user.get("business", {}).values() if biz.get("owned", False))
             auto_collect_count = sum(1 for biz in user.get("business", {}).values() 
                                     if biz.get("owned", False) and biz.get("auto_collect", False))
@@ -405,7 +417,7 @@ def register_user_handlers(dp):
                 f"📈 Заработано: {user['total_earned']:,.0f}₽\n"
                 f"🤝 Сделок: {user['trades_count']}\n"
                 f"👤 Роль: {'Админ' if user['role'] == 'admin' else 'Игрок'}\n"
-                f"🚗 Машин: {len(user.get('inventory', []))}\n"
+                f"🚗 Машин: {len(cars)}\n"
                 f"📦 Ресурсов: {resources_count}\n"
                 f"⛏️ Попыток: {user['mine_attempts']}/100\n"
                 f"🏢 Бизнесов: {business_count}\n"
@@ -464,7 +476,7 @@ def register_user_handlers(dp):
         await callback.answer()
 
     # ==========================================
-    # ===== ГАРАЖ =====
+    # ===== ГАРАЖ (С ИСПОЛЬЗОВАНИЕМ cars.json) =====
     # ==========================================
     
     @dp.callback_query(F.data == "garage")
@@ -480,13 +492,12 @@ def register_user_handlers(dp):
         
         try:
             user_id = str(callback.from_user.id)
-            users = await load_users()
-            user = users.get(user_id, get_default_user())
+            cars = await get_user_cars(user_id)
             
-            if "inventory" not in user or not user["inventory"]:
+            if not cars:
                 await callback.message.edit_text(
                     "🏠 **Ваш гараж пуст!**\n\n"
-                    "💡 Получайте машины через админов или в будущих акциях!",
+                    "💡 Получайте машины через админов, аукцион или реферальную систему!",
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                         [InlineKeyboardButton(text="🔙 Назад", callback_data="profile_menu")]
                     ]),
@@ -496,11 +507,8 @@ def register_user_handlers(dp):
                 return
             
             keyboard = []
-            for i, car in enumerate(user["inventory"]):
-                if isinstance(car, dict):
-                    car_name = car.get("name", "Неизвестная машина")
-                else:
-                    car_name = str(car)
+            for i, car in enumerate(cars):
+                car_name = car.get("name", "Неизвестная машина")
                 keyboard.append([InlineKeyboardButton(
                     text=f"🚗 {car_name}",
                     callback_data=f"car_{i}"
@@ -509,7 +517,7 @@ def register_user_handlers(dp):
             keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="profile_menu")])
             
             await callback.message.edit_text(
-                f"🏠 **Ваш гараж** ({len(user['inventory'])} машин):",
+                f"🏠 **Ваш гараж** ({len(cars)} машин):",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
                 parse_mode="Markdown"
             )
@@ -527,14 +535,13 @@ def register_user_handlers(dp):
         try:
             car_index = int(callback.data.split("_")[1])
             user_id = str(callback.from_user.id)
-            users = await load_users()
-            user = users.get(user_id, get_default_user())
+            cars = await get_user_cars(user_id)
             
-            if car_index >= len(user["inventory"]):
+            if car_index >= len(cars):
                 await callback.answer("❌ Машина не найдена!", show_alert=True)
                 return
             
-            car = user["inventory"][car_index]
+            car = cars[car_index]
             
             keyboard = [
                 [InlineKeyboardButton(text="💰 Продать (60%)", callback_data=f"car_sell_{car_index}")],
@@ -542,9 +549,9 @@ def register_user_handlers(dp):
             ]
             
             await callback.message.edit_text(
-                f"🚗 **{car['name']}**\n\n"
-                f"💰 Стоимость: {car['price']:,.0f}₽\n"
-                f"💵 Продажа: {int(car['price'] * 0.6):,.0f}₽ (60%)",
+                f"🚗 **{car.get('name', 'Неизвестная')}**\n\n"
+                f"💰 Стоимость: {car.get('price', 0):,.0f}₽\n"
+                f"💵 Продажа: {int(car.get('price', 0) * 0.6):,.0f}₽ (60%)",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
                 parse_mode="Markdown"
             )
@@ -566,23 +573,24 @@ def register_user_handlers(dp):
             user_id = str(callback.from_user.id)
             users = await load_users()
             user = users.get(user_id, get_default_user())
+            cars = await get_user_cars(user_id)
             
-            if car_index >= len(user["inventory"]):
+            if car_index >= len(cars):
                 await callback.answer("❌ Машина не найдена!", show_alert=True)
                 return
             
-            car = user["inventory"][car_index]
-            sell_price = int(car["price"] * 0.6)
+            car = cars[car_index]
+            sell_price = int(car.get("price", 0) * 0.6)
             
             user["money"] += sell_price
-            del user["inventory"][car_index]
-            
             users[user_id] = user
             await save_users(users)
             
+            await remove_user_car(user_id, car_index)
+            
             await callback.message.edit_text(
                 f"💰 **Продано!**\n\n"
-                f"🚗 {car['name']}\n"
+                f"🚗 {car.get('name', 'Неизвестная')}\n"
                 f"💳 Получено: {sell_price:,.0f}₽ (60% от цены)",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 В гараж", callback_data="garage")]
@@ -598,7 +606,7 @@ def register_user_handlers(dp):
         await callback.answer()
 
     # ==========================================
-    # ===== ИНВЕНТАРЬ =====
+    # ===== ИНВЕНТАРЬ (РЕСУРСЫ) =====
     # ==========================================
     
     @dp.callback_query(F.data == "inventory_main")
@@ -971,5 +979,538 @@ def register_user_handlers(dp):
     # ==========================================
     # ===== ОСТАЛЬНЫЕ ОБРАБОТЧИКИ =====
     # ==========================================
+
+    @dp.callback_query(F.data.startswith("buyer_resource_"))
+    async def buyer_resource_menu(callback: types.CallbackQuery):
+        if not await check_access(callback):
+            return
+        
+        try:
+            resource_name = callback.data.replace("buyer_resource_", "")
+            
+            user_id = str(callback.from_user.id)
+            inventory = await load_inventory()
+            
+            if user_id not in inventory:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            from config import MINE_RESOURCES, FARM_RESOURCES
+            all_resources = MINE_RESOURCES + FARM_RESOURCES
+            
+            price = 0
+            for r in all_resources:
+                if r["name"] == resource_name:
+                    price = r["price"]
+                    break
+            
+            if price == 0:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            count = inventory[user_id].count(resource_name)
+            
+            keyboard = [
+                [InlineKeyboardButton(
+                    text=f"💰 Продать 1 шт. ({price:,.0f}₽)",
+                    callback_data=f"buyer_sell_one_{resource_name}"
+                )],
+                [InlineKeyboardButton(
+                    text=f"💰 Продать все ({count} шт.)",
+                    callback_data=f"buyer_sell_all_{resource_name}"
+                )],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="buyer")]
+            ]
+            
+            await callback.message.edit_text(
+                f"💎 **{resource_name}**\n\n"
+                f"📦 В наличии: {count} шт.\n"
+                f"💰 Цена за шт.: {price:,.0f}₽\n"
+                f"💵 Сумма за все: {count * price:,.0f}₽\n\n"
+                f"Выберите действие:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в buyer_resource_menu: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data.startswith("buyer_sell_one_"))
+    async def buyer_sell_one(callback: types.CallbackQuery):
+        if not await check_access(callback):
+            return
+        
+        try:
+            resource_name = callback.data.replace("buyer_sell_one_", "")
+            
+            user_id = str(callback.from_user.id)
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            inventory = await load_inventory()
+            
+            if user_id not in inventory or resource_name not in inventory[user_id]:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            from config import MINE_RESOURCES, FARM_RESOURCES
+            all_resources = MINE_RESOURCES + FARM_RESOURCES
+            
+            price = 0
+            for r in all_resources:
+                if r["name"] == resource_name:
+                    price = r["price"]
+                    break
+            
+            if price == 0:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            inventory[user_id].remove(resource_name)
+            await save_inventory(inventory)
+            
+            user["money"] += price
+            user["total_earned"] = user.get("total_earned", 0) + price
+            users[user_id] = user
+            await save_users(users)
+            
+            await callback.message.edit_text(
+                f"✅ **Продано 1 шт. {resource_name}**\n\n"
+                f"💰 +{price:,.0f}₽\n"
+                f"💳 Новый баланс: {user['money']:,.0f}₽",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 К ресурсам", callback_data="buyer")]
+                ]),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в buyer_sell_one: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data.startswith("buyer_sell_all_"))
+    async def buyer_sell_all_resource(callback: types.CallbackQuery):
+        if not await check_access(callback):
+            return
+        
+        try:
+            resource_name = callback.data.replace("buyer_sell_all_", "")
+            
+            user_id = str(callback.from_user.id)
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            inventory = await load_inventory()
+            
+            if user_id not in inventory:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            from config import MINE_RESOURCES, FARM_RESOURCES
+            all_resources = MINE_RESOURCES + FARM_RESOURCES
+            
+            price = 0
+            for r in all_resources:
+                if r["name"] == resource_name:
+                    price = r["price"]
+                    break
+            
+            if price == 0:
+                await callback.answer("❌ Ресурс не найден!", show_alert=True)
+                return
+            
+            count = inventory[user_id].count(resource_name)
+            if count == 0:
+                await callback.answer("❌ Нет ресурсов для продажи!", show_alert=True)
+                return
+            
+            total_price = count * price
+            
+            inventory[user_id] = [item for item in inventory[user_id] if item != resource_name]
+            await save_inventory(inventory)
+            
+            user["money"] += total_price
+            user["total_earned"] = user.get("total_earned", 0) + total_price
+            users[user_id] = user
+            await save_users(users)
+            
+            await callback.message.edit_text(
+                f"✅ **Продано {count} шт. {resource_name}**\n\n"
+                f"💰 +{total_price:,.0f}₽\n"
+                f"💳 Новый баланс: {user['money']:,.0f}₽",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 К ресурсам", callback_data="buyer")]
+                ]),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в buyer_sell_all_resource: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data == "buyer_sell_all")
+    async def buyer_sell_all(callback: types.CallbackQuery):
+        if not await check_access(callback):
+            return
+        
+        try:
+            user_id = str(callback.from_user.id)
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            inventory = await load_inventory()
+            
+            if user_id not in inventory or not inventory[user_id]:
+                await callback.answer("❌ Инвентарь пуст!", show_alert=True)
+                return
+            
+            from config import MINE_RESOURCES, FARM_RESOURCES
+            all_resources = MINE_RESOURCES + FARM_RESOURCES
+            
+            total_price = 0
+            resource_counts = {}
+            for item in inventory[user_id]:
+                price = 0
+                for r in all_resources:
+                    if r["name"] == item:
+                        price = r["price"]
+                        break
+                total_price += price
+                resource_counts[item] = resource_counts.get(item, 0) + 1
+            
+            inventory[user_id] = []
+            await save_inventory(inventory)
+            
+            user["money"] += total_price
+            user["total_earned"] = user.get("total_earned", 0) + total_price
+            users[user_id] = user
+            await save_users(users)
+            
+            resources_text = ""
+            for name, count in resource_counts.items():
+                resources_text += f"• {name}: {count} шт.\n"
+            
+            await callback.message.edit_text(
+                f"✅ **Проданы все ресурсы!**\n\n"
+                f"📦 Продано:\n{resources_text}\n"
+                f"💰 Всего получено: {total_price:,.0f}₽\n"
+                f"💳 Новый баланс: {user['money']:,.0f}₽",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 В меню", callback_data="back_main")]
+                ]),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в buyer_sell_all: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data == "entertainment_menu")
+    async def entertainment_menu(callback: types.CallbackQuery, state: FSMContext):
+        if state:
+            await state.clear()
+        if not await check_access(callback):
+            return
+        
+        try:
+            keyboard = [
+                [InlineKeyboardButton(text="🎰 Казино", callback_data="casino")],
+                [InlineKeyboardButton(text="🚗 Аукцион", callback_data="auction")],
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
+            ]
+            
+            await callback.message.edit_text(
+                "🚀 **Развлечения**\n\nВыберите игру:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка в entertainment_menu: {e}")
+            await callback.answer("⚠️ Ошибка!", show_alert=True)
+        
+        await callback.answer()
+
+    @dp.callback_query(F.data == "mines_play")
+    async def continue_mines_game(callback: types.CallbackQuery):
+        """Продолжает игру в мины после /start"""
+        if not await check_access(callback):
+            return
+        
+        user_id = str(callback.from_user.id)
+        
+        if user_id not in mines_games:
+            await callback.answer("❌ Нет активной игры!", show_alert=True)
+            return
+        
+        game = mines_games[user_id]
+        total_cells = game["field_size"] * game["field_size"]
+        safe_cells = total_cells - game["mines_count"]
+        
+        def get_mines_multiplier(cells_opened):
+            if cells_opened <= 0:
+                return 0.0
+            multipliers = {1: 0.8, 2: 1.0, 3: 1.1, 4: 1.25, 5: 1.35, 6: 1.50}
+            if cells_opened <= 6:
+                return multipliers.get(cells_opened, 1.0)
+            return 1.50 + (cells_opened - 6) * 0.15
+        
+        keyboard = []
+        row = []
+        for i in range(total_cells):
+            if i in game["revealed"]:
+                row.append(InlineKeyboardButton(
+                    text="✅",
+                    callback_data=f"mines_cell_{i}"
+                ))
+            else:
+                row.append(InlineKeyboardButton(
+                    text="⬜",
+                    callback_data=f"mines_cell_{i}"
+                ))
+            if len(row) == game["field_size"]:
+                keyboard.append(row)
+                row = []
+        if row:
+            keyboard.append(row)
+        
+        multiplier = get_mines_multiplier(len(game["revealed"]))
+        current_win = int(game["bet"] * multiplier)
+        
+        keyboard.append([InlineKeyboardButton(
+            text=f"💰 Забрать выигрыш: {current_win:,.0f}₽ (x{multiplier})",
+            callback_data="mines_take_win"
+        )])
+        
+        text = f"💣 **МИНЫ**\n\n"
+        text += f"💰 Ставка: {game['bet']:,.0f}₽\n"
+        text += f"💣 Мин: {game['mines_count']}\n"
+        text += f"✅ Открыто: {len(game['revealed'])}/{safe_cells}\n"
+        text += f"📊 Текущий множитель: x{multiplier}\n\n"
+        text += "Выберите следующую клетку:"
+        
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+
+    # ==========================================
+    # ===== ГЛАВНЫЙ ОБРАБОТЧИК ВСЕХ СООБЩЕНИЙ =====
+    # ==========================================
     
-    # ... (остальные обработчики buyer_resource_menu, buyer_sell_one, buyer_sell_all_resource, buyer_sell_all, continue_mines_game, handle_all_messages остаются без изменений)
+    @dp.message(F.text, ~F.text.startswith('/'))
+    async def handle_all_messages(message: types.Message, state: FSMContext):
+        """Главный обработчик ВСЕХ текстовых сообщений"""
+        if not await check_access(message):
+            return
+        
+        current_state = await state.get_state()
+        user_id = str(message.from_user.id)
+        
+        logger.info(f"📩 Сообщение: {message.text}, Состояние: {current_state}")
+        
+        # ==========================================
+        # ===== 1. ПРОМОКОДЫ (ЕСЛИ НЕТ СОСТОЯНИЯ) =====
+        # ==========================================
+        if current_state is None:
+            try:
+                users = await load_users()
+                user = users.get(user_id)
+                
+                if not user:
+                    return
+                
+                promocodes = await load_promocodes()
+                code = message.text.upper().strip()
+                
+                logger.info(f"🔍 Проверка промокода: {code}")
+                logger.info(f"📦 Доступные промокоды: {list(promocodes.keys())}")
+                
+                if not promocodes:
+                    await message.answer("❌ В системе нет активных промокодов!")
+                    return
+                
+                if code not in promocodes:
+                    await message.answer("❌ Промокод не найден!")
+                    return
+                
+                promo = promocodes[code]
+                
+                if not all(key in promo for key in ["used", "uses", "type", "amount", "used_by"]):
+                    logger.error(f"❌ Некорректная структура промокода: {promo}")
+                    await message.answer("⚠️ Ошибка в структуре промокода!")
+                    return
+                
+                used_by = promo.get("used_by", [])
+                if user_id in used_by:
+                    await message.answer("❌ Вы уже использовали этот промокод!")
+                    return
+                
+                if promo["used"] >= promo["uses"]:
+                    await message.answer("❌ Промокод использован!")
+                    return
+                
+                if promo["type"] == "brcoins":
+                    user["brcoins"] += promo["amount"]
+                    user["donate_received"] = user.get("donate_received", 0) + promo["amount"]
+                else:
+                    user["money"] += promo["amount"]
+                    user["total_earned"] = user.get("total_earned", 0) + promo["amount"]
+                
+                promo["used"] += 1
+                promo["used_by"] = used_by + [user_id]
+                
+                users[user_id] = user
+                
+                await save_promocodes(promocodes)
+                await save_users(users)
+                
+                logger.info(f"✅ Промокод {code} активирован пользователем {user_id}")
+                
+                await message.answer(
+                    f"✅ +{promo['amount']:,} "
+                    f"{'BRcoins' if promo['type'] == 'brcoins' else '₽'}!"
+                )
+                return
+            except Exception as e:
+                logger.error(f"❌ Ошибка промокода: {e}")
+                await message.answer("⚠️ Ошибка при применении промокода!")
+                return
+        
+        # ==========================================
+        # ===== 2. АУКЦИОН =====
+        # ==========================================
+        if current_state == AuctionStates.waiting_for_auction_bid:
+            try:
+                amount = int(message.text.strip())
+                if amount <= 0:
+                    await message.answer("❌ Введите положительное число!")
+                    return
+                
+                data = await state.get_data()
+                page = data.get("auction_page", 0)
+                
+                from services.auction import place_bid
+                from database.file_manager import get_active_lots
+                
+                success, msg = await place_bid(user_id, page, amount)
+                
+                if success:
+                    await state.clear()
+                    try:
+                        await show_auction_lot(message, user_id, page)
+                    except Exception as e:
+                        logger.warning(f"Не удалось обновить лот: {e}")
+                    await message.answer(msg)
+                    return
+                else:
+                    await message.answer(msg)
+                    lots = await get_active_lots()
+                    if page < len(lots):
+                        lot = lots[page]
+                        await message.answer(
+                            f"✏️ Введите новую сумму ставки для **{lot['car_name']}**\n\n"
+                            f"💰 Текущая ставка: {lot['current_bid']:,}₽",
+                            parse_mode="Markdown"
+                        )
+                        await state.set_state(AuctionStates.waiting_for_auction_bid)
+                        await state.update_data(auction_page=page)
+                    return
+            except ValueError:
+                await message.answer("❌ Введите число!")
+                return
+            except Exception as e:
+                logger.error(f"Ошибка аукциона: {e}")
+                await message.answer("⚠️ Ошибка!")
+                await state.clear()
+                return
+        
+        # ==========================================
+        # ===== 3. ТРЕЙДИНГ =====
+        # ==========================================
+        if current_state == TradeStates.waiting_for_trade_amount:
+            # ... весь код трейдинга ...
+            pass
+        
+        # ==========================================
+        # ===== 4. КАЗИНО - СТАВКА =====
+        # ==========================================
+        if current_state == CasinoStates.waiting_for_casino_bet:
+            # ... весь код казино ...
+            pass
+        
+        # ==========================================
+        # ===== 5. КАЗИНО - МИНЫ (настройка) =====
+        # ==========================================
+        if current_state == CasinoStates.waiting_for_mines_count:
+            # ... весь код мин ...
+            pass
+        
+        # ==========================================
+        # ===== 6. КАЗИНО - ПОЛЕ =====
+        # ==========================================
+        if current_state == CasinoStates.waiting_for_field_size:
+            # ... весь код поля ...
+            pass
+        
+        # ==========================================
+        # ===== 7. ПОДДЕРЖКА =====
+        # ==========================================
+        if current_state == SupportStates.waiting_for_support_message:
+            try:
+                users = await load_users()
+                user = users.get(user_id, get_default_user())
+                
+                username = message.from_user.username or f"User_{user_id[:5]}"
+                
+                support_text = (
+                    f"🆘 **НОВОЕ ОБРАЩЕНИЕ В ПОДДЕРЖКУ**\n\n"
+                    f"👤 От: @{username}\n"
+                    f"🆔 ID: {user_id}\n"
+                    f"💰 Баланс: {user['money']:,.0f}₽\n"
+                    f"🔒 Заморожено: {user.get('frozen_balance', 0):,.0f}₽\n"
+                    f"💎 BRcoins: {user['brcoins']}\n\n"
+                    f"📝 Сообщение:\n{message.text}"
+                )
+                
+                sent_to = 0
+                for admin_id in ADMIN_IDS:
+                    try:
+                        await bot.send_message(admin_id, support_text)
+                        sent_to += 1
+                    except Exception as e:
+                        logger.warning(f"Не удалось отправить админу {admin_id}: {e}")
+                
+                await state.clear()
+                
+                if sent_to > 0:
+                    await message.answer(
+                        "✅ **Ваше сообщение отправлено администратору!**\n\n"
+                        "Мы свяжемся с вами в ближайшее время.",
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(text="🔙 В меню", callback_data="back_main")]
+                        ]),
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await message.answer(
+                        "❌ Не удалось отправить сообщение. Попробуйте позже.",
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(text="🔙 В меню", callback_data="back_main")]
+                        ]),
+                        parse_mode="Markdown"
+                    )
+                return
+            except Exception as e:
+                logger.error(f"Ошибка поддержки: {e}")
+                await state.clear()
+                await message.answer("⚠️ Ошибка!")
+                return
+        
+        # ==========================================
+        # ===== 8. ЕСЛИ НИЧЕГО НЕ ПОДОШЛО =====
+        # ==========================================
+        logger.info(f"⚠️ Сообщение не обработано: {message.text}, состояние: {current_state}")
