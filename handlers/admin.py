@@ -17,7 +17,8 @@ from database.file_manager import (
     load_users, save_users, load_business, save_business,
     load_settings, save_settings, load_promocodes, save_promocodes,
     load_disabled_functions, save_disabled_functions,
-    load_auction_data, save_auction_data
+    load_auction_data, save_auction_data,
+    add_user_car, get_user_cars
 )
 from utils.helpers import is_admin, get_default_user, get_stars_display
 from services.currency import currency_rates
@@ -204,6 +205,8 @@ def register_admin_handlers(dp):
                 await message.answer(f"❌ Пользователь @{username} не найден!")
                 return
             
+            cars = await get_user_cars(found_id)
+            
             text = (
                 f"👤 **ПРОФИЛЬ @{username}**\n\n"
                 f"💰 Баланс: {found_user['money']:,.0f}₽\n"
@@ -216,7 +219,7 @@ def register_admin_handlers(dp):
                 f"₿ BTC: {found_user['portfolio'].get('BTC', 0)}\n"
                 f"💧 WETcoin: {found_user['portfolio'].get('WETcoin', 0)}\n"
                 f"🪙 NotCoin: {found_user['portfolio'].get('NotCoin', 0)}\n\n"
-                f"🚗 Машин в гараже: {len(found_user.get('inventory', []))}"
+                f"🚗 Машин в гараже: {len(cars)}"
             )
             
             keyboard = [
@@ -338,22 +341,14 @@ def register_admin_handlers(dp):
         
         user_id = callback.data.replace("admin_garage_", "")
         try:
-            users = await load_users()
-            if user_id not in users:
-                await callback.answer("❌ Пользователь не найден!", show_alert=True)
-                return
-            
-            inventory = users[user_id].get("inventory", [])
-            if not inventory:
+            cars = await get_user_cars(user_id)
+            if not cars:
                 await callback.answer("🚗 У игрока нет машин!", show_alert=True)
                 return
             
             text = f"🚗 **Гараж игрока:**\n\n"
-            for i, car in enumerate(inventory, 1):
-                if isinstance(car, dict):
-                    text += f"{i}. {car.get('name', 'Неизвестно')} - {car.get('price', 0):,.0f}₽\n"
-                else:
-                    text += f"{i}. {car}\n"
+            for i, car in enumerate(cars, 1):
+                text += f"{i}. {car.get('name', 'Неизвестно')} - {car.get('price', 0):,.0f}₽\n"
             
             await callback.message.edit_text(
                 text,
@@ -455,19 +450,14 @@ def register_admin_handlers(dp):
                 try:
                     user = await bot.get_chat(int(user_id))
                     if user.username and user.username.lower() == username:
-                        if "inventory" not in data:
-                            data["inventory"] = []
-                        
                         car_price = AUCTION_CARS.get(car_name, {}).get("base_price", 0)
+                        
                         for _ in range(amount):
-                            data["inventory"].append({
+                            await add_user_car(user_id, {
                                 "name": car_name,
                                 "price": car_price,
                                 "from_admin": True
                             })
-                        
-                        users[user_id] = data
-                        await save_users(users)
                         
                         await message.answer(f"✅ @{username} получил {amount} шт. {car_name}!")
                         try:
@@ -886,7 +876,7 @@ def register_admin_handlers(dp):
                 "type": "brcoins" if promo_type == 1 else "money",
                 "uses": uses,
                 "used": 0,
-                "used_by": [],  # ← ДОБАВЛЕНО!
+                "used_by": [],
                 "amount": amount
             }
             await save_promocodes(promocodes)
