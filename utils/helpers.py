@@ -2,7 +2,10 @@ from typing import Union, Dict, Tuple
 import random
 from aiogram.types import Message, CallbackQuery
 from config import ADMIN_IDS, bot, logger
-from database.file_manager import load_disabled_functions, load_users, save_users
+from database.file_manager import (
+    load_disabled_functions, load_users, save_users,
+    add_user_car, get_user_cars
+)
 from models.user import UserModel
 
 def get_default_user():
@@ -81,7 +84,7 @@ def get_rarity_color(rarity: str) -> str:
 # ===== РЕФЕРАЛЬНАЯ СИСТЕМА =====
 # ==========================================
 
-async def generate_referral_link(user_id: str) -> str:  # ← ДОБАВИЛИ async
+async def generate_referral_link(user_id: str) -> str:
     """Генерирует реферальную ссылку"""
     me = await bot.get_me()
     return f"https://t.me/{me.username}?start=ref_{user_id}"
@@ -98,6 +101,7 @@ def generate_captcha() -> Tuple[str, list]:
 def get_referral_reward(user_id: str, users: Dict) -> Tuple[Dict, str]:
     """Выдаёт награду за реферала"""
     from config import AUCTION_CARS, REFERRAL_BONUS, REFERRAL_CAR_CHANCE
+    import random
     
     user = users.get(user_id, {})
     reward_text = ""
@@ -122,14 +126,14 @@ def get_referral_reward(user_id: str, users: Dict) -> Tuple[Dict, str]:
             
             car_name, car_data = random.choices(available_cars, weights=weights, k=1)[0]
             
-            if "inventory" not in user:
-                user["inventory"] = []
-            
-            user["inventory"].append({
+            # ✅ Добавляем машину в cars.json
+            import asyncio
+            from database.file_manager import add_user_car
+            asyncio.create_task(add_user_car(user_id, {
                 "name": car_name,
                 "price": car_data.get("base_price", 0),
                 "from_referral": True
-            })
+            }))
             
             stars = car_data.get("stars", 0)
             stars_display = "⭐" * stars + "☆" * (5 - stars)
