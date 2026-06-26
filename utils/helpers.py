@@ -76,3 +76,66 @@ def get_rarity_color(rarity: str) -> str:
         "Доступная": "🟢"
     }
     return colors.get(rarity, "⚪")
+
+
+# ==========================================
+# ===== РЕФЕРАЛЬНАЯ СИСТЕМА =====
+# ==========================================
+
+def generate_referral_link(user_id: str) -> str:
+    """Генерирует реферальную ссылку"""
+    return f"https://t.me/WeteroRussia_bot?start=ref_{user_id}"
+
+def generate_captcha() -> Tuple[str, list]:
+    """Генерирует капчу: (правильный_эмодзи, список_эмодзи)"""
+    CAPTCHA_EMOJIS = ["🍎", "🍐", "🍊", "🍋", "🍌", "🍉", "🍇", "🍓", "🍑", "🍒", "🥝", "🍍", "🥭"]
+    correct = random.choice(CAPTCHA_EMOJIS)
+    others = random.sample([e for e in CAPTCHA_EMOJIS if e != correct], 5)
+    emojis = [correct] + others
+    random.shuffle(emojis)
+    return correct, emojis
+
+def get_referral_reward(user_id: str, users: Dict) -> Tuple[Dict, str]:
+    """Выдаёт награду за реферала"""
+    from config import AUCTION_CARS, REFERRAL_BONUS, REFERRAL_CAR_CHANCE
+    import random
+    
+    user = users.get(user_id, {})
+    reward_text = ""
+    
+    # Денежный бонус
+    user["money"] = user.get("money", 0) + REFERRAL_BONUS
+    user["total_earned"] = user.get("total_earned", 0) + REFERRAL_BONUS
+    reward_text = f"💰 {REFERRAL_BONUS:,}₽"
+    
+    # Шанс на машину (20%)
+    if random.random() < REFERRAL_CAR_CHANCE:
+        available_cars = []
+        for name, data in AUCTION_CARS.items():
+            stars = data.get("stars", 0)
+            if stars in [3, 4, 5]:
+                available_cars.append((name, data))
+        
+        if available_cars:
+            weights = []
+            for name, data in available_cars:
+                stars = data.get("stars", 3)
+                weight = stars ** 2
+                weights.append(weight)
+            
+            car_name, car_data = random.choices(available_cars, weights=weights, k=1)[0]
+            
+            if "inventory" not in user:
+                user["inventory"] = []
+            
+            user["inventory"].append({
+                "name": car_name,
+                "price": car_data.get("base_price", 0),
+                "from_referral": True
+            })
+            
+            stars = car_data.get("stars", 0)
+            stars_display = "⭐" * stars + "☆" * (5 - stars)
+            reward_text += f"\n🚗 Получена машина: {car_name} {stars_display}"
+    
+    return user, reward_text
