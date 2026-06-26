@@ -5,7 +5,8 @@ from typing import List, Dict, Optional, Tuple
 
 from config import AUCTION_CARS, AUCTION_CONFIG, bot, logger
 from database.file_manager import (
-    load_users, save_users, load_auction_data, save_auction_data, get_active_lots
+    load_users, save_users, load_auction_data, save_auction_data, get_active_lots,
+    add_user_car
 )
 from utils.helpers import is_function_disabled, get_stars_display
 
@@ -83,72 +84,29 @@ async def update_auction_lots(force: bool = False):
     data = await load_auction_data()
     lots = data.get("lots", [])
     
-    # ✅ ЕСЛИ FORCE = TRUE — ПОЛНОСТЬЮ ПЕРЕСОЗДАЁМ ВСЕ ЛОТЫ
     if force:
-        # ✅ ПРИ ОБНОВЛЕНИИ: СПИСЫВАЕМ ЗАМОРОЖЕННЫЙ БАЛАНС И ВЫДАЁМ МАШИНУ
+        # Возвращаем замороженные средства
         users = await load_users()
         updated = False
         
         for lot in lots:
             bidder = lot.get("current_bidder")
-            final_price = lot.get("current_bid", 0)
-            
-            if bidder and final_price > 0 and not lot.get("sold", False):
+            bid = lot.get("current_bid", 0)
+            if bidder and bid > 0:
                 if bidder in users:
-                    car_name = lot["car_name"]
                     frozen = users[bidder].get("frozen_balance", 0)
-                    
-                    # ✅ Проверяем, достаточно ли замороженных средств
-                    if frozen >= final_price:
-                        # ✅ СПИСЫВАЕМ С ЗАМОРОЖЕННОГО БАЛАНСА
-                        users[bidder]["frozen_balance"] = max(0, frozen - final_price)
-                        
-                        # ✅ ДОБАВЛЯЕМ МАШИНУ В ИНВЕНТАРЬ
-                        if "inventory" not in users[bidder]:
-                            users[bidder]["inventory"] = []
-                        
-                        users[bidder]["inventory"].append({
-                            "name": car_name,
-                            "price": AUCTION_CARS.get(car_name, {}).get("base_price", 0),
-                            "from_auction": True,
-                            "bought_at": final_price
-                        })
-                        
-                        updated = True
-                        
-                        # ✅ ОТМЕЧАЕМ ЛОТ КАК ПРОДАННЫЙ
-                        lot["sold"] = True
-                        lot["is_active"] = False
-                        
-                        try:
-                            await bot.send_message(
-                                int(bidder),
-                                f"🎉 **АУКЦИОН ОБНОВЛЁН! ВЫ ВЫИГРАЛИ ЛОТ!**\n\n"
-                                f"🚗 {car_name}\n"
-                                f"⭐ {get_stars_display(lot['stars'])} {lot['rarity']}\n"
-                                f"💰 Цена: {final_price:,}₽\n\n"
-                                f"💳 Деньги списаны с замороженного баланса.\n"
-                                f"🔒 Остаток замороженных средств: {users[bidder]['frozen_balance']:,}₽\n"
-                                f"🚗 Машина добавлена в ваш гараж!\n\n"
-                                f"⚡ Торопитесь сделать новую ставку на свежие лоты!",
-                                parse_mode="Markdown"
-                            )
-                        except Exception as e:
-                            logger.warning(f"Не удалось уведомить пользователя {bidder}: {e}")
-                    else:
-                        # ✅ Недостаточно замороженных средств — возвращаем что есть
-                        users[bidder]["frozen_balance"] = 0
-                        users[bidder]["money"] += frozen
+                    if frozen >= bid:
+                        users[bidder]["frozen_balance"] -= bid
+                        users[bidder]["money"] += bid
                         updated = True
                         
                         try:
                             await bot.send_message(
                                 int(bidder),
                                 f"🔄 **Аукцион обновлён!**\n\n"
-                                f"❌ Недостаточно замороженных средств для покупки {car_name}.\n"
-                                f"💰 Сумма: {final_price:,}₽\n"
-                                f"🔒 Заморожено было: {frozen:,}₽\n"
-                                f"💳 {frozen:,}₽ возвращены на баланс.\n\n"
+                                f"💰 Ваша ставка в размере {bid:,}₽ разморожена и возвращена на баланс.\n"
+                                f"💳 Новый баланс: {users[bidder]['money']:,}₽\n"
+                                f"🔒 Заморожено: {users[bidder]['frozen_balance']:,}₽\n\n"
                                 f"⚡ Торопитесь сделать новую ставку на свежие лоты!",
                                 parse_mode="Markdown"
                             )
@@ -157,7 +115,7 @@ async def update_auction_lots(force: bool = False):
         
         if updated:
             await save_users(users)
-            logger.info("💾 Замороженные средства обработаны при обновлении аукциона")
+            logger.info("💾 Замороженные средства возвращены при обновлении аукциона")
         
         # Отменяем все старые таймеры
         for timer in auction_timers.values():
@@ -174,8 +132,6 @@ async def update_auction_lots(force: bool = False):
         
         if len(lots) < AUCTION_CONFIG["max_lots"]:
             new_lots = generate_auction_lots(AUCTION_CONFIG["max_lots"] - len(lots))
-            
-            # Проверяем, какие машины уже есть
             existing_names = [lot["car_name"] for lot in lots]
             for new_lot in new_lots:
                 if new_lot["car_name"] not in existing_names:
@@ -189,7 +145,6 @@ async def update_auction_lots(force: bool = False):
     data["last_update"] = datetime.now().isoformat()
     await save_auction_data(data)
     
-    # Запускаем таймеры для всех активных лотов
     for i, lot in enumerate(lots):
         if lot.get("is_active", True) and not lot.get("sold", False):
             await start_auction_timer(i)
@@ -243,9 +198,7 @@ async def auction_timer(lot_index: int):
             if user_id in users:
                 frozen = users[user_id].get("frozen_balance", 0)
                 
-                # ✅ Проверяем, достаточно ли замороженных средств
                 if frozen < final_price:
-                    # Недостаточно замороженных средств
                     users[user_id]["frozen_balance"] = 0
                     users[user_id]["money"] += frozen
                     lot["current_bidder"] = None
@@ -270,11 +223,8 @@ async def auction_timer(lot_index: int):
                 # ✅ СПИСЫВАЕМ С ЗАМОРОЖЕННОГО БАЛАНСА
                 users[user_id]["frozen_balance"] = max(0, frozen - final_price)
                 
-                # ✅ ДОБАВЛЯЕМ МАШИНУ В ИНВЕНТАРЬ
-                if "inventory" not in users[user_id]:
-                    users[user_id]["inventory"] = []
-                
-                users[user_id]["inventory"].append({
+                # ✅ ДОБАВЛЯЕМ МАШИНУ В cars.json
+                await add_user_car(user_id, {
                     "name": car_name,
                     "price": AUCTION_CARS.get(car_name, {}).get("base_price", 0),
                     "from_auction": True,
@@ -334,13 +284,11 @@ async def place_bid(user_id: str, lot_index: int, amount: int) -> Tuple[bool, st
     if user_id not in users:
         return False, "❌ Пользователь не найден!"
     
-    # ✅ ПРОВЕРЯЕМ ОБЫЧНЫЙ БАЛАНС (без учёта замороженного)
     available = users[user_id]["money"]
     
     if available < amount:
         return False, f"❌ Недостаточно средств! У вас {available:,}₽ (заморожено: {users[user_id].get('frozen_balance', 0):,}₽)"
     
-    # ✅ СПИСЫВАЕМ С ОБЫЧНОГО БАЛАНСА И ДОБАВЛЯЕМ В ЗАМОРОЖЕННЫЙ
     users[user_id]["money"] -= amount
     users[user_id]["frozen_balance"] = users[user_id].get("frozen_balance", 0) + amount
     await save_users(users)
@@ -358,13 +306,11 @@ async def place_bid(user_id: str, lot_index: int, amount: int) -> Tuple[bool, st
             current_active += 1
     
     if real_index is None:
-        # ✅ ВОЗВРАЩАЕМ ДЕНЬГИ ПРИ ОШИБКЕ
         users[user_id]["money"] += amount
         users[user_id]["frozen_balance"] = max(0, users[user_id].get("frozen_balance", 0) - amount)
         await save_users(users)
         return False, "❌ Ошибка: лот не найден!"
     
-    # ✅ РАЗМОРАЖИВАЕМ ДЕНЬГИ СТАРОГО ЛИДЕРА
     old_bidder = all_lots[real_index].get("current_bidder")
     old_bid = all_lots[real_index].get("current_bid", 0)
     if old_bidder and old_bid > 0:
@@ -377,15 +323,12 @@ async def place_bid(user_id: str, lot_index: int, amount: int) -> Tuple[bool, st
                 int(old_bidder),
                 f"🔄 **Вашу ставку перебили!**\n\n"
                 f"🚗 {all_lots[real_index]['car_name']}\n"
-                f"💸 Ваши {old_bid:,}₽ разморожены и возвращены на баланс.\n"
-                f"💳 Новый баланс: {users[old_bidder]['money']:,}₽\n"
-                f"🔒 Заморожено: {users[old_bidder]['frozen_balance']:,}₽",
+                f"💸 Ваши {old_bid:,}₽ разморожены и возвращены на баланс.",
                 parse_mode="Markdown"
             )
         except Exception as e:
             logger.warning(f"Не удалось уведомить пользователя {old_bidder}: {e}")
     
-    # Обновляем лот
     all_lots[real_index]["current_bid"] = amount
     all_lots[real_index]["current_bidder"] = user_id
     all_lots[real_index]["last_bid_time"] = datetime.now().isoformat()
@@ -393,7 +336,6 @@ async def place_bid(user_id: str, lot_index: int, amount: int) -> Tuple[bool, st
     await save_auction_data(data)
     await start_auction_timer(real_index)
     
-    # ✅ ПОЛУЧАЕМ ОБНОВЛЁННЫЕ ДАННЫЕ
     users = await load_users()
     frozen_amount = users.get(user_id, {}).get("frozen_balance", 0)
     
