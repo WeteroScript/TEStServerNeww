@@ -20,7 +20,7 @@ bot = Bot(token=API_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 # ========== АДМИНЫ ==========
-ADMIN_IDS = [5877790074, 1218587495, 5522080593]
+ADMIN_IDS = [5877790074, 1218587495]
 
 # ========== ПУТИ ==========
 DATA_DIR = os.getenv('SHARED_DIR', '/app/shared')
@@ -85,7 +85,7 @@ BUSINESS_CONFIG = {
         ],
         "min_resources": 1,
         "max_resources": 3,
-        "cooldown": 5400
+        "cooldown": 5
     },
     "tech_center": {
         "name": "Технический центр",
@@ -210,12 +210,12 @@ AUCTION_CARS = {
 # ========== НАСТРОЙКИ АУКЦИОНА ==========
 AUCTION_CONFIG = {
     "max_lots": 15,
-    "update_interval": 1800,
-    "bid_timeout": 1200,
+    "update_interval": 30,      # 30 секунд для теста (в проде 1800)
+    "bid_timeout": 10,
     "default_start_bid": 1000000
 }
 
-# ========== ID ФУНКЦИЙ ДЛЯ ОТКЛЮЧЕНИЯ ==========
+# ========== ID ФУНКЦИЙ ==========
 FUNCTION_IDS = {
     "job_1": "Шахта",
     "job_2": "Ферма",
@@ -239,6 +239,10 @@ FUNCTION_IDS = {
     "trading_2": "WETcoin",
     "trading_3": "NotCoin",
 }
+
+# ========== РЕФЕРАЛЬНАЯ СИСТЕМА ==========
+REFERRAL_BONUS = 150000000      # 150,000,000 ₽ за реферала
+REFERRAL_CAR_CHANCE = 0.20      # 20% шанс на машину
 
 logger.info(f"📁 Данные хранятся в: {DATA_DIR}")
 logger.info(f"👑 Админы: {ADMIN_IDS}")
