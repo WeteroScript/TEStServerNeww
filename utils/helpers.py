@@ -1,4 +1,5 @@
-from typing import Union
+from typing import Union, Dict, Tuple
+import random
 from aiogram.types import Message, CallbackQuery
 from config import ADMIN_IDS, bot, logger
 from database.file_manager import load_disabled_functions, load_users, save_users
@@ -28,13 +29,11 @@ async def check_access(message_or_callback: Union[Message, CallbackQuery]) -> bo
     
     user_id = str(message_or_callback.from_user.id)
     
-    # Проверка бана
     users = await load_users()
     if user_id in users and users[user_id].get("banned", False):
         await message_or_callback.answer("🚫 Вы забанены!", show_alert=True)
         return False
     
-    # Проверка включения бота
     settings = await load_settings()
     if not settings.get("bot_enabled", True):
         if not await is_admin(int(user_id)):
@@ -98,17 +97,14 @@ def generate_captcha() -> Tuple[str, list]:
 def get_referral_reward(user_id: str, users: Dict) -> Tuple[Dict, str]:
     """Выдаёт награду за реферала"""
     from config import AUCTION_CARS, REFERRAL_BONUS, REFERRAL_CAR_CHANCE
-    import random
     
     user = users.get(user_id, {})
     reward_text = ""
     
-    # Денежный бонус
     user["money"] = user.get("money", 0) + REFERRAL_BONUS
     user["total_earned"] = user.get("total_earned", 0) + REFERRAL_BONUS
     reward_text = f"💰 {REFERRAL_BONUS:,}₽"
     
-    # Шанс на машину (20%)
     if random.random() < REFERRAL_CAR_CHANCE:
         available_cars = []
         for name, data in AUCTION_CARS.items():
