@@ -71,7 +71,7 @@ def register_user_handlers(dp):
     # ==========================================
     
     @dp.message(Command("start"))
-    async def start_command(message: types.Message):
+    async def start_command(message: types.Message, state: FSMContext):  # ← ДОБАВИЛИ state
         user_id = str(message.from_user.id)
         
         try:
@@ -98,7 +98,6 @@ def register_user_handlers(dp):
                 # ✅ Показываем капчу
                 correct_emoji, emojis = generate_captcha()
                 
-                # Сохраняем временные данные в state
                 await message.answer(
                     f"🛡️ **Добро пожаловать в WeteroRussia!** 😉\n\n"
                     f"Чтобы пользоваться ботом, пройдите капчу.\n"
@@ -112,7 +111,6 @@ def register_user_handlers(dp):
                     parse_mode="Markdown"
                 )
                 
-                # Сохраняем данные для проверки
                 await state.update_data(
                     captcha_correct=correct_emoji,
                     captcha_referrer=referrer_id
@@ -161,7 +159,6 @@ def register_user_handlers(dp):
             parts = callback.data.split("_")
             index = int(parts[1])
             correct_emoji = parts[2]
-            selected_emoji = callback.data.split("_")[0] if len(parts) > 3 else None
             
             # Получаем данные из state
             data = await state.get_data()
@@ -323,12 +320,15 @@ def register_user_handlers(dp):
             
             referral_list = "\n".join([f"• {name}" for name in referral_names]) if referral_names else "Нет приглашённых"
             
+            # ✅ Генерируем ссылку через await
+            link = await generate_referral_link(user_id)
+            
             text = (
                 f"👥 **Реферальная система**\n\n"
                 f"📊 Приглашено: {referral_count} чел.\n"
                 f"💰 Награда за 1 реферала: 150,000,000₽ + 🚗 (шанс 20%)\n\n"
                 f"📋 **Ваши рефералы:**\n{referral_list}\n\n"
-                f"🔗 **Ваша ссылка:**\n`{generate_referral_link(user_id)}`\n\n"
+                f"🔗 **Ваша ссылка:**\n`{link}`\n\n"
                 f"Отправьте эту ссылку друзьям и получайте награды!"
             )
             
@@ -355,7 +355,7 @@ def register_user_handlers(dp):
         
         try:
             user_id = str(callback.from_user.id)
-            link = generate_referral_link(user_id)
+            link = await generate_referral_link(user_id)  # ← await!
             
             await callback.message.answer(
                 f"🔗 **Ваша реферальная ссылка:**\n\n"
