@@ -36,7 +36,7 @@ SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
 PROMOCODES_FILE = os.path.join(DATA_DIR, 'promocodes.json')
 INVENTORY_FILE = os.path.join(DATA_DIR, 'inventory.json')
 DISABLED_FUNCTIONS_FILE = os.path.join(DATA_DIR, 'disabled_functions.json')
-CARS_FILE = os.path.join(DATA_DIR, 'cars.json')  # ← НОВЫЙ ФАЙЛ!
+CARS_FILE = os.path.join(DATA_DIR, 'cars.json')
 
 # ========== КОНСТАНТЫ ==========
 CHANNEL_ID = "-1004461974511"
@@ -132,7 +132,7 @@ BUSINESS_CONFIG = {
 
 # ========== МАШИНЫ ДЛЯ АУКЦИОНА ==========
 AUCTION_CARS = {
-    # ★★★★★ Экзотические
+    # ★★★★★ Экзотические (8 шт.)
     "RcCar": {"stars": 5, "rarity": "Экзотическая", "base_price": 5000000000, "chance": 0.005, "start_bid": 10000000},
     "Игрушечный вертолетик": {"stars": 5, "rarity": "Экзотическая", "base_price": 5000000000, "chance": 0.005, "start_bid": 10000000},
     "Лимузин": {"stars": 5, "rarity": "Экзотическая", "base_price": 120000000, "chance": 0.005, "start_bid": 10000000},
@@ -142,7 +142,7 @@ AUCTION_CARS = {
     "Танк": {"stars": 5, "rarity": "Экзотическая", "base_price": 1200000000000, "chance": 0.005, "start_bid": 10000000},
     "Истребитель": {"stars": 5, "rarity": "Экзотическая", "base_price": 3500000000000, "chance": 0.005, "start_bid": 10000000},
     
-    # ★★★★☆ Легендарные
+    # ★★★★☆ Легендарные (20 шт.)
     "DeLorean DMC-12": {"stars": 4, "rarity": "Легендарная", "base_price": 250000000, "chance": 0.05, "start_bid": 200000000},
     "Zenvo ST1": {"stars": 4, "rarity": "Легендарная", "base_price": 400000000, "chance": 0.05, "start_bid": 200000000},
     "Koenigsegg CCX": {"stars": 4, "rarity": "Легендарная", "base_price": 450000000, "chance": 0.05, "start_bid": 200000000},
@@ -164,15 +164,114 @@ AUCTION_CARS = {
     "Pininfarina Battista": {"stars": 4, "rarity": "Легендарная", "base_price": 900000000, "chance": 0.05, "start_bid": 200000000},
     "Rimac Nevera": {"stars": 4, "rarity": "Легендарная", "base_price": 950000000, "chance": 0.05, "start_bid": 200000000},
     
-    # ★★★☆☆ Очень редкие
+    # ★★★☆☆ Очень редкие (44 шт.)
     "Artega GT": {"stars": 3, "rarity": "Очень редкая", "base_price": 60000000, "chance": 0.01, "start_bid": 55000000},
-    # ... (остальные машины)
+    "Gillet Vertigo": {"stars": 3, "rarity": "Очень редкая", "base_price": 70000000, "chance": 0.01, "start_bid": 55000000},
+    "Jensen Interceptor": {"stars": 3, "rarity": "Очень редкая", "base_price": 80000000, "chance": 0.01, "start_bid": 55000000},
+    "Bristol Fighter": {"stars": 3, "rarity": "Очень редкая", "base_price": 90000000, "chance": 0.01, "start_bid": 55000000},
+    "Maserati Merak": {"stars": 3, "rarity": "Очень редкая", "base_price": 100000000, "chance": 0.01, "start_bid": 55000000},
+    "TVR Cerbera": {"stars": 3, "rarity": "Очень редкая", "base_price": 100000000, "chance": 0.01, "start_bid": 55000000},
+    "Iso Grifo": {"stars": 3, "rarity": "Очень редкая", "base_price": 110000000, "chance": 0.01, "start_bid": 55000000},
+    "Lamborghini Jalpa": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
+    "Lotus Esprit V8": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
+    "Morgan Aero 8": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
+    "Caterham Seven 620R": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
+    "Donkervoort D8 GTO": {"stars": 3, "rarity": "Очень редкая", "base_price": 120000000, "chance": 0.01, "start_bid": 55000000},
+    "Bizzarrini 5300 GT": {"stars": 3, "rarity": "Очень редкая", "base_price": 130000000, "chance": 0.01, "start_bid": 55000000},
+    "Radical SR8": {"stars": 3, "rarity": "Очень редкая", "base_price": 130000000, "chance": 0.01, "start_bid": 55000000},
+    "De Tomaso Pantera": {"stars": 3, "rarity": "Очень редкая", "base_price": 140000000, "chance": 0.01, "start_bid": 55000000},
+    "KTM X-Bow": {"stars": 3, "rarity": "Очень редкая", "base_price": 140000000, "chance": 0.01, "start_bid": 55000000},
+    "Ferrari 308 GTB": {"stars": 3, "rarity": "Очень редкая", "base_price": 150000000, "chance": 0.01, "start_bid": 55000000},
+    "Ariel Atom 500": {"stars": 3, "rarity": "Очень редкая", "base_price": 150000000, "chance": 0.01, "start_bid": 55000000},
+    "Wiesmann MF5": {"stars": 3, "rarity": "Очень редкая", "base_price": 150000000, "chance": 0.01, "start_bid": 55000000},
+    "Ascari A10": {"stars": 3, "rarity": "Очень редкая", "base_price": 160000000, "chance": 0.01, "start_bid": 55000000},
+    "BAC Mono": {"stars": 3, "rarity": "Очень редкая", "base_price": 160000000, "chance": 0.01, "start_bid": 55000000},
+    "Ultima GTR": {"stars": 3, "rarity": "Очень редкая", "base_price": 180000000, "chance": 0.01, "start_bid": 55000000},
+    "Caparo T1": {"stars": 3, "rarity": "Очень редкая", "base_price": 180000000, "chance": 0.01, "start_bid": 55000000},
+    "Keating Berus": {"stars": 3, "rarity": "Очень редкая", "base_price": 180000000, "chance": 0.01, "start_bid": 55000000},
+    "Porsche 930 Turbo": {"stars": 3, "rarity": "Очень редкая", "base_price": 200000000, "chance": 0.01, "start_bid": 55000000},
+    "Spyker C8": {"stars": 3, "rarity": "Очень редкая", "base_price": 200000000, "chance": 0.01, "start_bid": 55000000},
+    "NIO EP9": {"stars": 3, "rarity": "Очень редкая", "base_price": 200000000, "chance": 0.01, "start_bid": 55000000},
+    "Trion Nemesis": {"stars": 3, "rarity": "Очень редкая", "base_price": 200000000, "chance": 0.01, "start_bid": 55000000},
+    "Gumpert Apollo": {"stars": 3, "rarity": "Очень редкая", "base_price": 220000000, "chance": 0.01, "start_bid": 55000000},
+    "Jaguar XJ220": {"stars": 3, "rarity": "Очень редкая", "base_price": 220000000, "chance": 0.01, "start_bid": 55000000},
+    "SCG 003": {"stars": 3, "rarity": "Очень редкая", "base_price": 220000000, "chance": 0.01, "start_bid": 55000000},
+    "BMW M1": {"stars": 3, "rarity": "Очень редкая", "base_price": 250000000, "chance": 0.01, "start_bid": 55000000},
+    "Drako GTE": {"stars": 3, "rarity": "Очень редкая", "base_price": 250000000, "chance": 0.01, "start_bid": 55000000},
+    "Noble M600": {"stars": 3, "rarity": "Очень редкая", "base_price": 280000000, "chance": 0.01, "start_bid": 55000000},
+    "Czinger 21C": {"stars": 3, "rarity": "Очень редкая", "base_price": 280000000, "chance": 0.01, "start_bid": 55000000},
+    "Mercedes-Benz CLK GTR": {"stars": 3, "rarity": "Очень редкая", "base_price": 300000000, "chance": 0.01, "start_bid": 55000000},
+    "Apollo Intensa Emozione": {"stars": 3, "rarity": "Очень редкая", "base_price": 300000000, "chance": 0.01, "start_bid": 55000000},
+    "Lamborghini Countach 2022": {"stars": 3, "rarity": "Очень редкая", "base_price": 350000000, "chance": 0.01, "start_bid": 55000000},
+    "Aspark Owl": {"stars": 3, "rarity": "Очень редкая", "base_price": 500000000, "chance": 0.01, "start_bid": 55000000},
+    "Hispano Suiza Carmen": {"stars": 3, "rarity": "Очень редкая", "base_price": 650000000, "chance": 0.01, "start_bid": 55000000},
+    "Lotus Evija": {"stars": 3, "rarity": "Очень редкая", "base_price": 850000000, "chance": 0.01, "start_bid": 55000000},
+    "Bugatti La Voiture Noire": {"stars": 3, "rarity": "Очень редкая", "base_price": 5000000000, "chance": 0.01, "start_bid": 55000000},
+    "Bugatti Divo": {"stars": 3, "rarity": "Очень редкая", "base_price": 4000000000, "chance": 0.01, "start_bid": 55000000},
+    "Bugatti Centodieci": {"stars": 3, "rarity": "Очень редкая", "base_price": 4500000000, "chance": 0.01, "start_bid": 55000000},
+    
+    # ★★☆☆☆ Редкие (30 шт.)
+    "Aston Martin DB5": {"stars": 2, "rarity": "Редкая", "base_price": 150000000, "chance": 0.30, "start_bid": 30000000},
+    "Aston Martin DBS": {"stars": 2, "rarity": "Редкая", "base_price": 120000000, "chance": 0.30, "start_bid": 25000000},
+    "Aston Martin V8 Vantage": {"stars": 2, "rarity": "Редкая", "base_price": 100000000, "chance": 0.30, "start_bid": 20000000},
+    "Aston Martin DB7": {"stars": 2, "rarity": "Редкая", "base_price": 80000000, "chance": 0.30, "start_bid": 15000000},
+    "Aston Martin V12 Vanquish": {"stars": 2, "rarity": "Редкая", "base_price": 180000000, "chance": 0.30, "start_bid": 35000000},
+    "Aston Martin Rapide": {"stars": 2, "rarity": "Редкая", "base_price": 90000000, "chance": 0.30, "start_bid": 18000000},
+    "Bentley Continental GT": {"stars": 2, "rarity": "Редкая", "base_price": 350000000, "chance": 0.30, "start_bid": 70000000},
+    "Bentley Flying Spur": {"stars": 2, "rarity": "Редкая", "base_price": 300000000, "chance": 0.30, "start_bid": 60000000},
+    "Bentley Mulsanne": {"stars": 2, "rarity": "Редкая", "base_price": 400000000, "chance": 0.30, "start_bid": 80000000},
+    "Bentley Brooklands": {"stars": 2, "rarity": "Редкая", "base_price": 250000000, "chance": 0.30, "start_bid": 50000000},
+    "Bentley Arnage": {"stars": 2, "rarity": "Редкая", "base_price": 200000000, "chance": 0.30, "start_bid": 40000000},
+    "Bentley Azure": {"stars": 2, "rarity": "Редкая", "base_price": 220000000, "chance": 0.30, "start_bid": 45000000},
+    "Rolls-Royce Phantom": {"stars": 2, "rarity": "Редкая", "base_price": 600000000, "chance": 0.30, "start_bid": 120000000},
+    "Rolls-Royce Ghost": {"stars": 2, "rarity": "Редкая", "base_price": 500000000, "chance": 0.30, "start_bid": 100000000},
+    "Rolls-Royce Wraith": {"stars": 2, "rarity": "Редкая", "base_price": 550000000, "chance": 0.30, "start_bid": 110000000},
+    "Rolls-Royce Dawn": {"stars": 2, "rarity": "Редкая", "base_price": 480000000, "chance": 0.30, "start_bid": 95000000},
+    "Rolls-Royce Cullinan": {"stars": 2, "rarity": "Редкая", "base_price": 650000000, "chance": 0.30, "start_bid": 130000000},
+    "Rolls-Royce Silver Shadow": {"stars": 2, "rarity": "Редкая", "base_price": 120000000, "chance": 0.30, "start_bid": 25000000},
+    "Rolls-Royce Silver Cloud": {"stars": 2, "rarity": "Редкая", "base_price": 150000000, "chance": 0.30, "start_bid": 30000000},
+    "Rolls-Royce Corniche": {"stars": 2, "rarity": "Редкая", "base_price": 100000000, "chance": 0.30, "start_bid": 20000000},
+    "BMW M5 CS": {"stars": 2, "rarity": "Редкая", "base_price": 800000000, "chance": 0.30, "start_bid": 160000000},
+    "BMW M5 F90": {"stars": 2, "rarity": "Редкая", "base_price": 700000000, "chance": 0.30, "start_bid": 140000000},
+    "BMW M8 Competition": {"stars": 2, "rarity": "Редкая", "base_price": 900000000, "chance": 0.30, "start_bid": 180000000},
+    "BMW M4 CSL": {"stars": 2, "rarity": "Редкая", "base_price": 600000000, "chance": 0.30, "start_bid": 120000000},
+    "BMW M3 E46": {"stars": 2, "rarity": "Редкая", "base_price": 300000000, "chance": 0.30, "start_bid": 60000000},
+    "BMW M3 E92": {"stars": 2, "rarity": "Редкая", "base_price": 350000000, "chance": 0.30, "start_bid": 70000000},
+    "BMW M2 Competition": {"stars": 2, "rarity": "Редкая", "base_price": 400000000, "chance": 0.30, "start_bid": 80000000},
+    "BMW Z8": {"stars": 2, "rarity": "Редкая", "base_price": 450000000, "chance": 0.30, "start_bid": 90000000},
+    "BMW 507": {"stars": 2, "rarity": "Редкая", "base_price": 500000000, "chance": 0.30, "start_bid": 100000000},
+    "BMW M1": {"stars": 2, "rarity": "Редкая", "base_price": 250000000, "chance": 0.30, "start_bid": 50000000},
+    
+    # ★☆☆☆☆ Доступные (23 шт.)
+    "Zaz 968": {"stars": 1, "rarity": "Доступная", "base_price": 500000, "chance": 0.50, "start_bid": 100000},
+    "Lada 2101": {"stars": 1, "rarity": "Доступная", "base_price": 300000, "chance": 0.50, "start_bid": 50000},
+    "Lada 2107": {"stars": 1, "rarity": "Доступная", "base_price": 400000, "chance": 0.50, "start_bid": 80000},
+    "Lada 2109": {"stars": 1, "rarity": "Доступная", "base_price": 350000, "chance": 0.50, "start_bid": 70000},
+    "Lada 2110": {"stars": 1, "rarity": "Доступная", "base_price": 450000, "chance": 0.50, "start_bid": 90000},
+    "Lada Niva": {"stars": 1, "rarity": "Доступная", "base_price": 600000, "chance": 0.50, "start_bid": 120000},
+    "Lada Vesta": {"stars": 1, "rarity": "Доступная", "base_price": 800000, "chance": 0.50, "start_bid": 150000},
+    "Lada XRAY": {"stars": 1, "rarity": "Доступная", "base_price": 700000, "chance": 0.50, "start_bid": 140000},
+    "Lada Granta": {"stars": 1, "rarity": "Доступная", "base_price": 500000, "chance": 0.50, "start_bid": 100000},
+    "Lada Kalina": {"stars": 1, "rarity": "Доступная", "base_price": 400000, "chance": 0.50, "start_bid": 80000},
+    "Lada Priora": {"stars": 1, "rarity": "Доступная", "base_price": 450000, "chance": 0.50, "start_bid": 90000},
+    "Moskvich 412": {"stars": 1, "rarity": "Доступная", "base_price": 250000, "chance": 0.50, "start_bid": 50000},
+    "Moskvich 2140": {"stars": 1, "rarity": "Доступная", "base_price": 300000, "chance": 0.50, "start_bid": 60000},
+    "Moskvich 408": {"stars": 1, "rarity": "Доступная", "base_price": 200000, "chance": 0.50, "start_bid": 40000},
+    "GAZ 24 Volga": {"stars": 1, "rarity": "Доступная", "base_price": 800000, "chance": 0.50, "start_bid": 150000},
+    "GAZ 21 Volga": {"stars": 1, "rarity": "Доступная", "base_price": 1000000, "chance": 0.50, "start_bid": 200000},
+    "GAZ 3102 Volga": {"stars": 1, "rarity": "Доступная", "base_price": 600000, "chance": 0.50, "start_bid": 120000},
+    "UAZ 469": {"stars": 1, "rarity": "Доступная", "base_price": 700000, "chance": 0.50, "start_bid": 140000},
+    "UAZ Patriot": {"stars": 1, "rarity": "Доступная", "base_price": 900000, "chance": 0.50, "start_bid": 180000},
+    "UAZ Hunter": {"stars": 1, "rarity": "Доступная", "base_price": 800000, "chance": 0.50, "start_bid": 160000},
+    "VAZ 2101": {"stars": 1, "rarity": "Доступная", "base_price": 300000, "chance": 0.50, "start_bid": 60000},
+    "VAZ 2106": {"stars": 1, "rarity": "Доступная", "base_price": 400000, "chance": 0.50, "start_bid": 80000},
+    "VAZ 2107": {"stars": 1, "rarity": "Доступная", "base_price": 400000, "chance": 0.50, "start_bid": 80000}
 }
 
 # ========== НАСТРОЙКИ АУКЦИОНА ==========
 AUCTION_CONFIG = {
     "max_lots": 15,
-    "update_interval": 30,
+    "update_interval": 1800,
     "bid_timeout": 10,
     "default_start_bid": 1000000
 }
