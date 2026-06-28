@@ -33,7 +33,7 @@ from handlers.auction import show_auction_lot
 
 # States
 from states import (
-    SupportStates, AuctionStates, TradeStates, CasinoStates
+    SupportStates, AuctionStates, TradeStates, CasinoStates, DonateStates
 )
 
 # ==========================================
@@ -628,7 +628,7 @@ def register_user_handlers(dp):
             if user_id not in inventory or not inventory[user_id]:
                 await callback.message.edit_text(
                     "📦 **Ваш инвентарь пуст!**\n\n"
-                    "Добывайте ресурсы в шахте или на ферме.",
+                    "Добывайте ресурсы в шахте или на рыбалке.",
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                         [InlineKeyboardButton(text="🔙 Назад", callback_data="profile_menu")]
                     ]),
@@ -636,9 +636,6 @@ def register_user_handlers(dp):
                 )
                 await callback.answer()
                 return
-            
-            # Используем ALL_RESOURCES из config
-            from config import ALL_RESOURCES
             
             resources = {}
             for item in inventory[user_id]:
@@ -946,16 +943,12 @@ def register_user_handlers(dp):
             ]),
             parse_mode="Markdown"
         )
-        await state.set_state("waiting_for_brcoin_convert")
+        await state.set_state(DonateStates.waiting_for_brcoin_convert)
+        await callback.answer()
 
-
-    @dp.message(F.text, ~F.text.startswith('/'))
+    @dp.message(DonateStates.waiting_for_brcoin_convert)
     async def process_brcoin_convert(message: types.Message, state: FSMContext):
-        """Обработчик конвертации BRcoins → рубли"""
-        current_state = await state.get_state()
-        if current_state != "waiting_for_brcoin_convert":
-            return
-        
+        """Обработчик конвертации BRcoins → рубли (по состоянию FSM)"""
         if not await check_access(message):
             await state.clear()
             return
@@ -1041,8 +1034,6 @@ def register_user_handlers(dp):
                 await callback.answer()
                 return
             
-            from config import ALL_RESOURCES
-            
             resources = {}
             for item in inventory[user_id]:
                 resources[item] = resources.get(item, 0) + 1
@@ -1089,8 +1080,6 @@ def register_user_handlers(dp):
             if user_id not in inventory:
                 await callback.answer("❌ Ресурс не найден!", show_alert=True)
                 return
-            
-            from config import ALL_RESOURCES
             
             price = 0
             for r in ALL_RESOURCES:
@@ -1148,8 +1137,6 @@ def register_user_handlers(dp):
                 await callback.answer("❌ Ресурс не найден!", show_alert=True)
                 return
             
-            from config import ALL_RESOURCES
-            
             price = 0
             for r in ALL_RESOURCES:
                 if r["name"] == resource_name:
@@ -1199,8 +1186,6 @@ def register_user_handlers(dp):
             if user_id not in inventory:
                 await callback.answer("❌ Ресурс не найден!", show_alert=True)
                 return
-            
-            from config import ALL_RESOURCES
             
             price = 0
             for r in ALL_RESOURCES:
@@ -1256,8 +1241,6 @@ def register_user_handlers(dp):
             if user_id not in inventory or not inventory[user_id]:
                 await callback.answer("❌ Инвентарь пуст!", show_alert=True)
                 return
-            
-            from config import ALL_RESOURCES
             
             total_price = 0
             resource_counts = {}
@@ -1476,64 +1459,9 @@ def register_user_handlers(dp):
                 return
         
         # ==========================================
-        # ===== 2. КОНВЕРТЕР BRcoins =====
+        # ===== 2. АУКЦИОН =====
         # ==========================================
-        if current_state == "waiting_for_brcoin_convert":
-            try:
-                amount = int(message.text.strip())
-                if amount <= 0:
-                    await message.answer("❌ Введите положительное число!")
-                    return
-                
-                user_id = str(message.from_user.id)
-                users = await load_users()
-                user = users.get(user_id, get_default_user())
-                
-                if amount > user["brcoins"]:
-                    await message.answer(
-                        f"❌ У вас только {user['brcoins']} BRcoins!\n"
-                        f"Введите меньшее количество."
-                    )
-                    return
-                
-                rub_amount = amount * BRCOIN_TO_RUB_RATE
-                
-                user["brcoins"] -= amount
-                user["money"] += rub_amount
-                user["total_earned"] = user.get("total_earned", 0) + rub_amount
-                
-                users[user_id] = user
-                await save_users(users)
-                await state.clear()
-                
-                await message.answer(
-                    f"✅ **Конвертация выполнена!**\n\n"
-                    f"💎 -{amount} BRcoins\n"
-                    f"💰 +{rub_amount:,.0f}₽\n\n"
-                    f"💳 Новый баланс: {user['money']:,.0f}₽\n"
-                    f"💎 Остаток BRcoins: {user['brcoins']}",
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="💱 Конвертировать ещё", callback_data="convert_brcoins")],
-                        [InlineKeyboardButton(text="🔙 В донат", callback_data="donate")]
-                    ]),
-                    parse_mode="Markdown"
-                )
-                return
-                
-            except ValueError:
-                await message.answer("❌ Введите число!")
-                await state.clear()
-                return
-            except Exception as e:
-                logger.error(f"Ошибка конвертации BRcoins: {e}")
-                await message.answer("⚠️ Ошибка!")
-                await state.clear()
-                return
-        
-        # ==========================================
-        # ===== 3. АУКЦИОН =====
-        # ==========================================
-        if current_state == AuctionStates.waiting_for_auction_bid:
+        if current_state == AuctionStates.waiting_for_auction_bid.state:
             try:
                 amount = int(message.text.strip())
                 if amount <= 0:
@@ -1579,9 +1507,9 @@ def register_user_handlers(dp):
                 return
         
         # ==========================================
-        # ===== 4. ТРЕЙДИНГ =====
+        # ===== 3. ТРЕЙДИНГ =====
         # ==========================================
-        if current_state == TradeStates.waiting_for_trade_amount:
+        if current_state == TradeStates.waiting_for_trade_amount.state:
             try:
                 amount = int(message.text.strip())
                 if amount <= 0:
@@ -1692,9 +1620,9 @@ def register_user_handlers(dp):
                 return
         
         # ==========================================
-        # ===== 5. КАЗИНО - СТАВКА =====
+        # ===== 4. КАЗИНО - СТАВКА =====
         # ==========================================
-        if current_state == CasinoStates.waiting_for_casino_bet:
+        if current_state == CasinoStates.waiting_for_casino_bet.state:
             try:
                 amount = int(message.text.strip())
                 if amount <= 0:
@@ -1735,9 +1663,9 @@ def register_user_handlers(dp):
                 return
         
         # ==========================================
-        # ===== 6. КАЗИНО - МИНЫ (настройка) =====
+        # ===== 5. КАЗИНО - МИНЫ (настройка) =====
         # ==========================================
-        if current_state == CasinoStates.waiting_for_mines_count:
+        if current_state == CasinoStates.waiting_for_mines_count.state:
             try:
                 amount = int(message.text.strip())
                 if amount <= 0:
@@ -1780,9 +1708,9 @@ def register_user_handlers(dp):
                 return
         
         # ==========================================
-        # ===== 7. КАЗИНО - ПОЛЕ =====
+        # ===== 6. КАЗИНО - ПОЛЕ =====
         # ==========================================
-        if current_state == CasinoStates.waiting_for_field_size:
+        if current_state == CasinoStates.waiting_for_field_size.state:
             try:
                 amount = int(message.text.strip())
                 if amount < 3 or amount > 8:
@@ -1819,9 +1747,9 @@ def register_user_handlers(dp):
                 return
         
         # ==========================================
-        # ===== 8. ПОДДЕРЖКА =====
+        # ===== 7. ПОДДЕРЖКА =====
         # ==========================================
-        if current_state == SupportStates.waiting_for_support_message:
+        if current_state == SupportStates.waiting_for_support_message.state:
             try:
                 users = await load_users()
                 user = users.get(user_id, get_default_user())
@@ -1873,6 +1801,6 @@ def register_user_handlers(dp):
                 return
         
         # ==========================================
-        # ===== 9. ЕСЛИ НИЧЕГО НЕ ПОДОШЛО =====
+        # ===== 8. ЕСЛИ НИЧЕГО НЕ ПОДОШЛО =====
         # ==========================================
         logger.info(f"⚠️ Сообщение не обработано: {message.text}, состояние: {current_state}")
