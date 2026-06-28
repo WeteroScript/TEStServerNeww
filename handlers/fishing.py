@@ -192,11 +192,13 @@ FISH_DATA = {
 
 def register_fishing_handlers(dp):
     
-    async def get_fishing_data(user_id: str):
-        """Получает данные рыбалки пользователя"""
-        users = await load_users()
-        user = users.get(user_id, get_default_user())
-        return user.get("fishing", {
+    # ==========================================
+    # ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+    # ==========================================
+    
+    def get_default_fishing_data() -> dict:
+        """Возвращает чистую структуру данных рыбалки"""
+        return {
             "rod": "basic",
             "tackle": "basic",
             "bait": None,
@@ -205,55 +207,135 @@ def register_fishing_handlers(dp):
             "fish_inventory": {},
             "rods": {"basic": True},
             "tackles": {"basic": True}
-        })
+        }
+    
+    def validate_fishing_data(fishing: dict) -> dict:
+        """Проверяет и восстанавливает данные рыбалки"""
+        if not isinstance(fishing, dict):
+            logger.error(f"Ошибка типа данных рыбалки: {type(fishing)}")
+            return get_default_fishing_data()
+        
+        defaults = get_default_fishing_data()
+        
+        for key, default_value in defaults.items():
+            if key not in fishing:
+                fishing[key] = default_value
+                continue
+            
+            if not isinstance(fishing[key], type(default_value)):
+                logger.warning(f"Неверный тип для fishing.{key}")
+                fishing[key] = default_value
+                continue
+            
+            if isinstance(default_value, dict):
+                if not fishing[key]:
+                    fishing[key] = default_value
+                elif not all(isinstance(v, bool) for v in fishing[key].values()):
+                    fishing[key] = {k: v for k, v in fishing[key].items() 
+                                   if isinstance(v, bool)}
+        
+        return fishing
+    
+    def get_bait_bonus(bait_name: str = None) -> int:
+        """Получает бонус приманки с проверкой валидности"""
+        if not bait_name:
+            return 0
+        
+        for category, baits in FISHING_BAITS.items():
+            for bait in baits:
+                if bait["name"] == bait_name:
+                    return bait.get("bonus", 0)
+        
+        logger.warning(f"Приманка не найдена: {bait_name}")
+        return 0
+    
+    async def get_fishing_data(user_id: str):
+        """Получает и проверяет данные рыбалки пользователя"""
+        try:
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            fishing = user.get("fishing", {})
+            
+            # ✅ Проверяем перед возвратом
+            fishing = validate_fishing_data(fishing)
+            
+            # Сохраняем исправленные данные
+            user["fishing"] = fishing
+            users[user_id] = user
+            await save_users(users)
+            
+            return fishing
+        except Exception as e:
+            logger.error(f"Ошибка загрузки данных рыбалки для {user_id}: {e}")
+            return get_default_fishing_data()
     
     async def save_fishing_data(user_id: str, fishing_data: dict):
         """Сохраняет данные рыбалки пользователя"""
-        users = await load_users()
-        user = users.get(user_id, get_default_user())
-        user["fishing"] = fishing_data
-        users[user_id] = user
-        await save_users(users)
+        try:
+            users = await load_users()
+            user = users.get(user_id, get_default_user())
+            user["fishing"] = fishing_data
+            users[user_id] = user
+            await save_users(users)
+        except Exception as e:
+            logger.error(f"Ошибка сохранения данных рыбалки: {e}")
     
     async def get_fishing_inventory(user_id: str) -> list:
-        """Получает инвентарь приманок из inventory.json"""
-        inventory = await load_inventory()
-        return inventory.get(user_id, [])
+        """Получает инвентарь приманок"""
+        try:
+            inventory = await load_inventory()
+            return inventory.get(user_id, [])
+        except Exception as e:
+            logger.error(f"Ошибка загрузки инвентаря: {e}")
+            return []
     
     async def add_to_inventory(user_id: str, item: str):
         """Добавляет предмет в инвентарь"""
-        inventory = await load_inventory()
-        if user_id not in inventory:
-            inventory[user_id] = []
-        inventory[user_id].append(item)
-        await save_inventory(inventory)
+        try:
+            inventory = await load_inventory()
+            if user_id not in inventory:
+                inventory[user_id] = []
+            inventory[user_id].append(item)
+            await save_inventory(inventory)
+        except Exception as e:
+            logger.error(f"Ошибка добавления в инвентарь: {e}")
     
     async def remove_from_inventory(user_id: str, item: str) -> bool:
         """Удаляет предмет из инвентаря"""
-        inventory = await load_inventory()
-        if user_id not in inventory:
+        try:
+            inventory = await load_inventory()
+            if user_id not in inventory:
+                return False
+            if item in inventory[user_id]:
+                inventory[user_id].remove(item)
+                await save_inventory(inventory)
+                return True
             return False
-        if item in inventory[user_id]:
-            inventory[user_id].remove(item)
-            await save_inventory(inventory)
-            return True
-        return False
+        except Exception as e:
+            logger.error(f"Ошибка удаления из инвентаря: {e}")
+            return False
     
     def get_fish(rod_key: str, bait_bonus: int = 0) -> dict:
-        """Ловит рыбу с учётом приманки (бонус увеличивает шанс на редкую рыбу)"""
+        """Ловит рыбу с учётом приманки"""
         fish_list = FISH_DATA.get(rod_key, FISH_DATA["basic"])
         
-        # ✅ Приманка увеличивает шанс на редкую рыбу
-        # Чем выше бонус, тем больше шанс выпасть редкой рыбе
+        if not fish_list:
+            logger.error(f"Нет рыб для удочки: {rod_key}")
+            return {"name": "Неизвестная рыба", "price": 0, "chance": 100}
+        
+        # ✅ Создаём новый список без изменения FISH_DATA
         modified_fish_list = []
+        
         for fish in fish_list:
-            # Увеличиваем шанс для всех рыб, но особенно для редких
-            if fish["chance"] < 10:  # Редкая рыба (шанс < 10%)
-                modified_chance = fish["chance"] * (1 + bait_bonus / 100)
-            elif fish["chance"] < 30:  # Средняя рыба (шанс 10-30%)
-                modified_chance = fish["chance"] * (1 + bait_bonus / 200)
-            else:  # Обычная рыба
-                modified_chance = fish["chance"] * (1 + bait_bonus / 300)
+            base_chance = fish["chance"]
+            
+            # Применяем бонус приманки
+            if base_chance < 10:  # Редкая рыба
+                modified_chance = base_chance * (1 + bait_bonus / 100)
+            elif base_chance < 30:  # Обычная рыба
+                modified_chance = base_chance * (1 + bait_bonus / 200)
+            else:  # Частая рыба
+                modified_chance = base_chance * (1 + bait_bonus / 300)
             
             modified_fish_list.append({
                 "name": fish["name"],
@@ -261,21 +343,27 @@ def register_fishing_handlers(dp):
                 "chance": modified_chance
             })
         
-        # Нормализуем шансы
+        # ✅ Нормализуем шансы
         total_chance = sum(f["chance"] for f in modified_fish_list)
-        if total_chance > 0:
-            for fish in modified_fish_list:
-                fish["chance"] = fish["chance"] / total_chance * 100
         
-        # Выбираем рыбу
+        if total_chance <= 0:
+            logger.error(f"Ошибка шансов для удочки {rod_key}")
+            return modified_fish_list[0]
+        
+        for fish in modified_fish_list:
+            fish["chance"] = (fish["chance"] / total_chance) * 100
+        
+        # ✅ Выбираем рыбу
         roll = random.random() * 100
-        cumulative = 0
+        cumulative = 0.0
+        
         for fish in modified_fish_list:
             cumulative += fish["chance"]
             if roll <= cumulative:
                 return fish
         
-        return random.choice(modified_fish_list)
+        logger.warning(f"Резервная рыба для {rod_key}")
+        return modified_fish_list[-1]
     
     # ==========================================
     # ===== ГЛАВНОЕ МЕНЮ РЫБАЛКИ =====
@@ -328,7 +416,7 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_menu: {e}")
+            logger.error(f"Ошибка в fishing_menu: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
@@ -350,40 +438,36 @@ def register_fishing_handlers(dp):
             rod = FISHING_RODS.get(rod_key, FISHING_RODS["basic"])
             bait_name = fishing.get("bait")
             
-            # Проверяем приманку (если выбрана)
+            # Проверяем приманку
             bait_bonus = 0
             if bait_name:
-                # Ищем приманку во всех категориях
-                for category, baits in FISHING_BAITS.items():
-                    for bait in baits:
-                        if bait["name"] == bait_name:
-                            bait_bonus = bait["bonus"]
-                            break
-                    if bait_bonus > 0:
-                        break
-                
-                # Проверяем, есть ли приманка в инвентаре
+                # Проверяем наличие в инвентаре
                 inventory = await get_fishing_inventory(user_id)
                 bait_item = f"Приманка: {bait_name}"
                 if bait_item not in inventory:
-                    await callback.answer("❌ У вас нет выбранной приманки! Приманка используется 1 раз.", show_alert=True)
+                    fishing["bait"] = None
+                    await save_fishing_data(user_id, fishing)
+                    await callback.answer("❌ У вас нет выбранной приманки!", show_alert=True)
                     return
                 
-                # ✅ Тратим приманку
+                # Получаем бонус с проверкой
+                bait_bonus = get_bait_bonus(bait_name)
+                if bait_bonus == 0 and bait_name:
+                    logger.warning(f"Некорректная приманка для пользователя {user_id}: {bait_name}")
+                    fishing["bait"] = None
+                    await save_fishing_data(user_id, fishing)
+                    await callback.answer("⚠️ Приманка повреждена, выбор отменён.", show_alert=True)
+                    return
+                
+                # Тратим приманку
                 await remove_from_inventory(user_id, bait_item)
             
-            # ✅ Снасть НЕ ТРАТИТСЯ!
-            
-            # Ловим рыбу (бонус приманки увеличивает шанс на редкую рыбу)
+            # Ловим рыбу
             fish = get_fish(rod_key, bait_bonus)
             
             if fish:
                 # Сохраняем рыбу в инвентарь
-                inventory = await load_inventory()
-                if user_id not in inventory:
-                    inventory[user_id] = []
-                inventory[user_id].append(fish["name"])
-                await save_inventory(inventory)
+                await add_to_inventory(user_id, fish["name"])
                 
                 # Обновляем статистику
                 fishing["fish_caught"] = fishing.get("fish_caught", 0) + 1
@@ -401,8 +485,7 @@ def register_fishing_handlers(dp):
                     f"🎣 **УЛОВ!**\n\n"
                     f"🐟 {fish['name']}\n"
                     f"💰 Цена: {fish['price']:,.0f}₽\n"
-                    f"📊 Шанс: {rod['base_chance']}%{bonus_text}\n"
-                    f"🐛 Приманка использована"
+                    f"📊 Шанс: {rod['base_chance']}%{bonus_text}"
                 )
             else:
                 await save_fishing_data(user_id, fishing)
@@ -412,8 +495,7 @@ def register_fishing_handlers(dp):
                 text = (
                     f"🎣 **НИЧЕГО НЕ ПОЙМАЛИ!**\n\n"
                     f"😔 Рыба ушла...\n"
-                    f"📊 Шанс: {rod['base_chance']}%{bonus_text}\n"
-                    f"🐛 Приманка использована"
+                    f"📊 Шанс: {rod['base_chance']}%{bonus_text}"
                 )
             
             await callback.message.edit_text(
@@ -425,13 +507,13 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_cast: {e}")
+            logger.error(f"Ошибка в fishing_cast: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
     
     # ==========================================
-    # ===== МАГАЗИН (С КНОПКАМИ!) =====
+    # ===== МАГАЗИН =====
     # ==========================================
     
     @dp.callback_query(F.data == "fishing_shop")
@@ -453,13 +535,13 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_shop: {e}")
+            logger.error(f"Ошибка в fishing_shop: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
     
     # ==========================================
-    # ===== УДОЧКИ (С КНОПКАМИ ПОКУПКИ) =====
+    # ===== УДОЧКИ =====
     # ==========================================
     
     @dp.callback_query(F.data == "fishing_rods")
@@ -511,7 +593,7 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_rods: {e}")
+            logger.error(f"Ошибка в fishing_rods: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
@@ -534,7 +616,7 @@ def register_fishing_handlers(dp):
             
             await fishing_rods(callback)
         except Exception as e:
-            logger.error(f"Ошибка в fishing_select_rod: {e}")
+            logger.error(f"Ошибка в fishing_select_rod: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
@@ -573,13 +655,13 @@ def register_fishing_handlers(dp):
             await callback.answer(f"✅ Куплена {rod['name']}!", show_alert=True)
             await fishing_rods(callback)
         except Exception as e:
-            logger.error(f"Ошибка в fishing_buy_rod: {e}")
+            logger.error(f"Ошибка в fishing_buy_rod: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
     
     # ==========================================
-    # ===== СНАСТИ (С КНОПКАМИ ПОКУПКИ) =====
+    # ===== СНАСТИ =====
     # ==========================================
     
     @dp.callback_query(F.data == "fishing_tackle")
@@ -640,7 +722,7 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_tackle: {e}")
+            logger.error(f"Ошибка в fishing_tackle: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
@@ -663,7 +745,7 @@ def register_fishing_handlers(dp):
             
             await fishing_tackle(callback)
         except Exception as e:
-            logger.error(f"Ошибка в fishing_select_tackle: {e}")
+            logger.error(f"Ошибка в fishing_select_tackle: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
@@ -702,13 +784,13 @@ def register_fishing_handlers(dp):
             await callback.answer(f"✅ Куплена {tackle['name']}!", show_alert=True)
             await fishing_tackle(callback)
         except Exception as e:
-            logger.error(f"Ошибка в fishing_buy_tackle: {e}")
+            logger.error(f"Ошибка в fishing_buy_tackle: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
     
     # ==========================================
-    # ===== ПРИМАНКИ (С КНОПКАМИ ПОКУПКИ) =====
+    # ===== ПРИМАНКИ (ИСПРАВЛЕНО!) =====
     # ==========================================
     
     @dp.callback_query(F.data == "fishing_baits")
@@ -732,7 +814,7 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_baits_menu: {e}")
+            logger.error(f"Ошибка в fishing_baits_menu: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
@@ -744,7 +826,14 @@ def register_fishing_handlers(dp):
         
         try:
             category = callback.data.replace("fishing_baits_", "")
-            baits = FISHING_BAITS.get(category, [])
+            
+            # ✅ ИСПРАВЛЕНИЕ: Проверяем, что категория существует
+            if category not in FISHING_BAITS:
+                logger.error(f"Неизвестная категория приманок: {category}")
+                await callback.answer("❌ Неизвестная категория!", show_alert=True)
+                return
+            
+            baits = FISHING_BAITS[category]
             
             if not baits:
                 await callback.answer("❌ Нет приманок в этой категории!", show_alert=True)
@@ -753,14 +842,17 @@ def register_fishing_handlers(dp):
             text = f"🐛 **{category.upper()} ПРИМАНКИ**\n\n"
             keyboard = []
             
-            for bait in baits:
+            # ✅ ИСПРАВЛЕНИЕ: Используем индексы вместо названий в callback_data
+            for idx, bait in enumerate(baits):
                 text += f"• {bait['name']}\n"
-                text += f"   💰 Цена: {bait['price']:,.0f}₽ (за шт.)\n"
-                text += f"   📈 Бонус к шансу: +{bait['bonus']}%\n\n"
+                text += f"   💰 Цена: {bait['price']:,.0f}₽\n"
+                text += f"   📈 Бонус: +{bait['bonus']}%\n\n"
                 
+                # ✅ Безопасный callback (всегда < 64 байта)
+                callback_data = f"bait_buy_{category}_{idx}"
                 keyboard.append([InlineKeyboardButton(
-                    text=f"🛒 Купить {bait['name']}",
-                    callback_data=f"fishing_buy_bait_{category}_{bait['name']}_{bait['price']}"
+                    text=f"🛒 {bait['name']}",
+                    callback_data=callback_data
                 )])
             
             keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="fishing_baits")])
@@ -771,43 +863,72 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_baits_category: {e}")
+            logger.error(f"Ошибка в fishing_baits_category: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
     
-    @dp.callback_query(F.data.startswith("fishing_buy_bait_"))
+    @dp.callback_query(F.data.startswith("bait_buy_"))
     async def fishing_buy_bait(callback: types.CallbackQuery):
         if not await check_access(callback):
             return
         
         try:
+            # ✅ ИСПРАВЛЕНИЕ: Парсим по индексам
             parts = callback.data.split("_")
-            category = parts[3]
-            # Название может содержать пробелы (восстанавливаем)
-            bait_name = "_".join(parts[4:-1])
-            price = int(parts[-1])
+            if len(parts) < 4:
+                await callback.answer("❌ Ошибка при покупке!", show_alert=True)
+                return
+            
+            category = parts[2]
+            try:
+                bait_index = int(parts[3])
+            except (ValueError, IndexError):
+                await callback.answer("❌ Ошибка при покупке!", show_alert=True)
+                return
+            
+            # ✅ Получаем приманку по индексу
+            if category not in FISHING_BAITS:
+                await callback.answer("❌ Категория не найдена!", show_alert=True)
+                return
+            
+            baits = FISHING_BAITS[category]
+            if bait_index >= len(baits):
+                await callback.answer("❌ Приманка не найдена!", show_alert=True)
+                return
+            
+            bait = baits[bait_index]
+            price = bait["price"]
+            bait_name = bait["name"]
             
             user_id = str(callback.from_user.id)
             users = await load_users()
             user = users.get(user_id, get_default_user())
             
+            # Проверяем деньги
             if user["money"] < price:
-                await callback.answer(f"❌ Недостаточно средств! Нужно {price:,.0f}₽", show_alert=True)
+                await callback.answer(
+                    f"❌ Недостаточно средств! Нужно {price:,.0f}₽\nЕсть: {user['money']:,.0f}₽",
+                    show_alert=True
+                )
                 return
             
+            # Снимаем деньги
             user["money"] -= price
             users[user_id] = user
             await save_users(users)
             
-            # Добавляем приманку в инвентарь
+            # Добавляем в инвентарь
             await add_to_inventory(user_id, f"Приманка: {bait_name}")
             
-            await callback.answer(f"✅ Куплена приманка: {bait_name}!", show_alert=True)
+            await callback.answer(
+                f"✅ Куплена: {bait_name}!\n💰 Осталось: {user['money']:,.0f}₽",
+                show_alert=True
+            )
             await fishing_baits_category(callback)
         except Exception as e:
-            logger.error(f"Ошибка в fishing_buy_bait: {e}")
-            await callback.answer("⚠️ Ошибка!", show_alert=True)
+            logger.error(f"Ошибка в fishing_buy_bait: {e}", exc_info=True)
+            await callback.answer("⚠️ Критическая ошибка!", show_alert=True)
         
         await callback.answer()
     
@@ -830,21 +951,22 @@ def register_fishing_handlers(dp):
             tackle = FISHING_TACKLE.get(tackle_key, FISHING_TACKLE["basic"])
             current_bait = fishing.get("bait", "Не выбрана")
             
-            # Получаем все приманки из инвентаря
+            # Получаем приманки из инвентаря
             inventory = await get_fishing_inventory(user_id)
             baits_inventory = []
             for item in inventory:
                 if item.startswith("Приманка: "):
                     bait_name = item.replace("Приманка: ", "")
-                    baits_inventory.append(bait_name)
+                    if bait_name not in baits_inventory:
+                        baits_inventory.append(bait_name)
             
             text = (
                 f"⚙️ **НАСТРОЙКИ РЫБАЛКИ**\n\n"
                 f"🎣 Удочка: {rod['emoji']} {rod['name']}\n"
                 f"🔧 Снасть: {tackle['emoji']} {tackle['name']}\n"
-                f"🐛 Текущая приманка: {current_bait}\n"
-                f"📦 Приманок в инвентаре: {len(baits_inventory)}\n\n"
-                f"Выберите приманку для использования:"
+                f"🐛 Текущая: {current_bait}\n"
+                f"📦 В инвентаре: {len(baits_inventory)}\n\n"
+                f"Выберите приманку:"
             )
             
             keyboard = []
@@ -854,13 +976,8 @@ def register_fishing_handlers(dp):
                     is_selected = bait_name == current_bait
                     keyboard.append([InlineKeyboardButton(
                         text=f"{'✅' if is_selected else '🐛'} {bait_name}",
-                        callback_data=f"fishing_select_bait_{bait_name}"
+                        callback_data=f"fishing_select_bait_{baits_inventory.index(bait_name)}"
                     )])
-            else:
-                keyboard.append([InlineKeyboardButton(
-                    text="❌ Нет приманок",
-                    callback_data="fishing_no_baits"
-                )])
             
             keyboard.append([InlineKeyboardButton(
                 text="❌ Снять приманку",
@@ -874,7 +991,7 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_settings: {e}")
+            logger.error(f"Ошибка в fishing_settings: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
@@ -885,24 +1002,31 @@ def register_fishing_handlers(dp):
             return
         
         try:
-            bait_name = callback.data.replace("fishing_select_bait_", "")
+            bait_index = int(callback.data.replace("fishing_select_bait_", ""))
             user_id = str(callback.from_user.id)
             
-            # Проверяем, есть ли приманка в инвентаре
             inventory = await get_fishing_inventory(user_id)
-            bait_item = f"Приманка: {bait_name}"
-            if bait_item not in inventory:
-                await callback.answer("❌ У вас нет этой приманки!", show_alert=True)
+            baits_inventory = []
+            for item in inventory:
+                if item.startswith("Приманка: "):
+                    bait_name = item.replace("Приманка: ", "")
+                    if bait_name not in baits_inventory:
+                        baits_inventory.append(bait_name)
+            
+            if bait_index >= len(baits_inventory):
+                await callback.answer("❌ Приманка не найдена!", show_alert=True)
                 return
+            
+            bait_name = baits_inventory[bait_index]
             
             fishing = await get_fishing_data(user_id)
             fishing["bait"] = bait_name
             await save_fishing_data(user_id, fishing)
             
-            await callback.answer(f"✅ Выбрана приманка: {bait_name}!", show_alert=True)
+            await callback.answer(f"✅ Выбрана: {bait_name}!", show_alert=True)
             await fishing_settings(callback)
         except Exception as e:
-            logger.error(f"Ошибка в fishing_select_bait: {e}")
+            logger.error(f"Ошибка в fishing_select_bait: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
@@ -921,14 +1045,10 @@ def register_fishing_handlers(dp):
             await callback.answer("✅ Приманка снята!", show_alert=True)
             await fishing_settings(callback)
         except Exception as e:
-            logger.error(f"Ошибка в fishing_remove_bait: {e}")
+            logger.error(f"Ошибка в fishing_remove_bait: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
-    
-    @dp.callback_query(F.data == "fishing_no_baits")
-    async def fishing_no_baits(callback: types.CallbackQuery):
-        await callback.answer("Купите приманки в магазине!", show_alert=True)
     
     # ==========================================
     # ===== СТАТИСТИКА =====
@@ -958,14 +1078,14 @@ def register_fishing_handlers(dp):
                 f"🔧 Снасть: {tackle['emoji']} {tackle['name']}\n"
                 f"🐟 Всего поймано: {fishing.get('total_fish', 0)}\n"
                 f"📦 Разных рыб: {len(fish_inventory)}\n\n"
-                f"**Топ-3 рыбы:**\n"
+                f"**Топ-5 рыб:**\n"
             )
             
-            sorted_fish = sorted(fish_inventory.items(), key=lambda x: x[1], reverse=True)[:3]
-            for name, count in sorted_fish:
-                text += f"• {name}: {count} шт.\n"
-            
-            if not sorted_fish:
+            sorted_fish = sorted(fish_inventory.items(), key=lambda x: x[1], reverse=True)[:5]
+            if sorted_fish:
+                for name, count in sorted_fish:
+                    text += f"• {name}: {count} шт.\n"
+            else:
                 text += "• Нет рыб\n"
             
             await callback.message.edit_text(
@@ -976,7 +1096,7 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_stats: {e}")
+            logger.error(f"Ошибка в fishing_stats: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
@@ -994,26 +1114,19 @@ def register_fishing_handlers(dp):
             text = (
                 "ℹ️ **ИНФОРМАЦИЯ О РЫБАЛКЕ**\n\n"
                 "**🎣 УДОЧКИ:**\n"
-                "1. 🚀 Галактическая (95%) - 1500 рыб, 20,000,000,000₽\n"
-                "2. 🌋 Вулканическая (85%) - 750 рыб, 1,500,000,000₽\n"
-                "3. ⭐ Легендарная (70%) - 250 рыб, 500,000,000₽\n"
-                "4. 🔮 Редкая (65%) - 50 рыб, 150,000,000₽\n"
+                "1. 🚀 Галактическая (95%) - 1500 рыб, 20B₽\n"
+                "2. 🌋 Вулканическая (85%) - 750 рыб, 1.5B₽\n"
+                "3. ⭐ Легендарная (70%) - 250 рыб, 500M₽\n"
+                "4. 🔮 Редкая (65%) - 50 рыб, 150M₽\n"
                 "5. 🎣 Базовая (55%) - бесплатно\n\n"
-                "**🔧 СНАСТИ (НЕ ТРАТЯТСЯ!):**\n"
-                "1. 🚀 Галактическая - 7,500,000,000₽\n"
-                "2. 🌋 Вулканическая - 1,500,000,000₽\n"
-                "3. ⭐ Легендарная - 350,000,000₽\n"
-                "4. 🔮 Редкая - 75,000,000₽\n"
-                "5. 🎣 Базовая - бесплатно\n\n"
-                "**🐛 ПРИМАНКИ (ТРАТЯТСЯ 1 РАЗ):**\n"
-                "Увеличивают шанс на поимку РЕДКОЙ рыбы.\n"
-                "Чем выше бонус → тем больше шанс редкой рыбы.\n"
-                "Доступны в магазине по 5 штук на удочку.\n"
-                "Для использования выберите в настройках.\n\n"
+                "**🐛 ПРИМАНКИ (тратятся 1 раз):**\n"
+                "• Увеличивают шанс редкой рыбы\n"
+                "• Выбираются в настройках\n"
+                "• Покупаются в магазине\n\n"
                 "**🐟 РЫБЫ:**\n"
-                "Разные рыбы для каждой удочки.\n"
-                "Чем реже рыба → тем выше цена.\n"
-                "Продавать рыбу можно у Скупщика."
+                "• Разные для каждой удочки\n"
+                "• Редкие стоят дороже\n"
+                "• Продаются у Скупщика"
             )
             
             await callback.message.edit_text(
@@ -1024,7 +1137,7 @@ def register_fishing_handlers(dp):
                 parse_mode="Markdown"
             )
         except Exception as e:
-            logger.error(f"Ошибка в fishing_info: {e}")
+            logger.error(f"Ошибка в fishing_info: {e}", exc_info=True)
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
