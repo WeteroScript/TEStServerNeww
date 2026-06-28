@@ -946,63 +946,6 @@ def register_user_handlers(dp):
         await state.set_state(DonateStates.waiting_for_brcoin_convert)
         await callback.answer()
 
-    @dp.message(DonateStates.waiting_for_brcoin_convert)
-    async def process_brcoin_convert(message: types.Message, state: FSMContext):
-        """Обработчик конвертации BRcoins → рубли (по состоянию FSM)"""
-        if not await check_access(message):
-            await state.clear()
-            return
-        
-        try:
-            amount = int(message.text.strip())
-            if amount <= 0:
-                await message.answer("❌ Введите положительное число!")
-                return
-            
-            user_id = str(message.from_user.id)
-            users = await load_users()
-            user = users.get(user_id, get_default_user())
-            
-            if amount > user["brcoins"]:
-                await message.answer(
-                    f"❌ У вас только {user['brcoins']} BRcoins!\n"
-                    f"Введите меньшее количество."
-                )
-                return
-            
-            # Расчёт
-            rub_amount = amount * BRCOIN_TO_RUB_RATE
-            
-            # Списываем BRcoins, добавляем рубли
-            user["brcoins"] -= amount
-            user["money"] += rub_amount
-            user["total_earned"] = user.get("total_earned", 0) + rub_amount
-            
-            users[user_id] = user
-            await save_users(users)
-            await state.clear()
-            
-            await message.answer(
-                f"✅ **Конвертация выполнена!**\n\n"
-                f"💎 -{amount} BRcoins\n"
-                f"💰 +{rub_amount:,.0f}₽\n\n"
-                f"💳 Новый баланс: {user['money']:,.0f}₽\n"
-                f"💎 Остаток BRcoins: {user['brcoins']}",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="💱 Конвертировать ещё", callback_data="convert_brcoins")],
-                    [InlineKeyboardButton(text="🔙 В донат", callback_data="donate")]
-                ]),
-                parse_mode="Markdown"
-            )
-            
-        except ValueError:
-            await message.answer("❌ Введите число!")
-            await state.clear()
-        except Exception as e:
-            logger.error(f"Ошибка конвертации BRcoins: {e}")
-            await message.answer("⚠️ Ошибка!")
-            await state.clear()
-
     # ==========================================
     # ===== СКУПЩИК (ТОЛЬКО АВТО-ШАХТА СО СКИДКОЙ 40%) =====
     # ==========================================
@@ -1047,9 +990,9 @@ def register_user_handlers(dp):
                 for r in ALL_RESOURCES:
                     if r["name"] == name:
                         if name in auto_mine_names:
-                            price = int(r["price"] * 0.6)  # ⚠️ ТОЛЬКО АВТО-ШАХТА СО СКИДКОЙ 40%
+                            price = int(r["price"] * 0.6)  # ТОЛЬКО АВТО-ШАХТА СО СКИДКОЙ 40%
                         else:
-                            price = r["price"]  # ✅ ОСТАЛЬНОЕ ПО ПОЛНОЙ ЦЕНЕ
+                            price = r["price"]  # ОСТАЛЬНОЕ ПО ПОЛНОЙ ЦЕНЕ
                         break
                 keyboard.append([InlineKeyboardButton(
                     text=f"💎 {name} ({count} шт.) - {price:,.0f}₽",
@@ -1097,10 +1040,10 @@ def register_user_handlers(dp):
             for r in ALL_RESOURCES:
                 if r["name"] == resource_name:
                     if resource_name in auto_mine_names:
-                        price = int(r["price"] * 0.6)  # ⚠️ ТОЛЬКО АВТО-ШАХТА СО СКИДКОЙ 40%
+                        price = int(r["price"] * 0.6)
                         is_auto_mine = True
                     else:
-                        price = r["price"]  # ✅ ОСТАЛЬНОЕ ПО ПОЛНОЙ ЦЕНЕ
+                        price = r["price"]
                     break
             
             if price == 0:
@@ -1438,6 +1381,60 @@ def register_user_handlers(dp):
         user_id = str(message.from_user.id)
         
         logger.info(f"📩 Сообщение: {message.text}, Состояние: {current_state}")
+        
+        # ==========================================
+        # ===== 0. КОНВЕРТЕР BRcoins (САМЫЙ ПРИОРИТЕТНЫЙ!) =====
+        # ==========================================
+        if current_state == DonateStates.waiting_for_brcoin_convert.state:
+            try:
+                amount = int(message.text.strip())
+                if amount <= 0:
+                    await message.answer("❌ Введите положительное число!")
+                    return
+                
+                users = await load_users()
+                user = users.get(user_id, get_default_user())
+                
+                if amount > user["brcoins"]:
+                    await message.answer(
+                        f"❌ У вас только {user['brcoins']} BRcoins!\n"
+                        f"Введите меньшее количество."
+                    )
+                    return
+                
+                rub_amount = amount * BRCOIN_TO_RUB_RATE
+                
+                user["brcoins"] -= amount
+                user["money"] += rub_amount
+                user["total_earned"] = user.get("total_earned", 0) + rub_amount
+                
+                users[user_id] = user
+                await save_users(users)
+                await state.clear()
+                
+                await message.answer(
+                    f"✅ **Конвертация выполнена!**\n\n"
+                    f"💎 -{amount} BRcoins\n"
+                    f"💰 +{rub_amount:,.0f}₽\n\n"
+                    f"💳 Новый баланс: {user['money']:,.0f}₽\n"
+                    f"💎 Остаток BRcoins: {user['brcoins']}",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="💱 Конвертировать ещё", callback_data="convert_brcoins")],
+                        [InlineKeyboardButton(text="🔙 В донат", callback_data="donate")]
+                    ]),
+                    parse_mode="Markdown"
+                )
+                return
+                
+            except ValueError:
+                await message.answer("❌ Введите число!")
+                await state.clear()
+                return
+            except Exception as e:
+                logger.error(f"Ошибка конвертации BRcoins: {e}")
+                await message.answer("⚠️ Ошибка!")
+                await state.clear()
+                return
         
         # ==========================================
         # ===== 1. ПРОМОКОДЫ (ЕСЛИ НЕТ СОСТОЯНИЯ) =====
