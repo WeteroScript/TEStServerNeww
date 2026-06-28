@@ -10,71 +10,75 @@ from states import AuctionStates
 
 user_auction_page = {}
 
-def register_auction_handlers(dp):
+# ==========================================
+# ===== ФУНКЦИЯ НА ВЕРХНЕМ УРОВНЕ =====
+# ==========================================
+
+async def show_auction_lot(message: types.Message, user_id: str, page: int):
+    """Показывает конкретный лот аукциона"""
+    lots = await get_active_lots()
     
-    async def show_auction_lot(message: types.Message, user_id: str, page: int):
-        """Показывает конкретный лот аукциона"""
-        lots = await get_active_lots()
-        
-        if not lots:
-            await message.edit_text(
-                "🚗 АУКЦИОН\n\n"
-                "На данный момент нет активных лотов.\n"
-                "Загляните позже!",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
-                ])
-            )
-            return
-        
-        if page < 0:
-            page = len(lots) - 1
-        elif page >= len(lots):
-            page = 0
-        
-        user_auction_page[user_id] = page
-        
-        lot = lots[page]
-        car_name = lot["car_name"]
-        stars = lot.get("stars", 1)
-        rarity = lot.get("rarity", "Доступная")
-        start_bid = lot.get("start_bid", 0)
-        current_bid = lot.get("current_bid", start_bid)
-        current_bidder = lot.get("current_bidder")
-        
-        bidder_info = "Нет ставок"
-        if current_bidder:
-            try:
-                user = await bot.get_chat(int(current_bidder))
-                bidder_info = f"@{user.username}" if user.username else f"ID: {current_bidder[:5]}..."
-            except:
-                bidder_info = f"ID: {current_bidder[:5]}..."
-        
-        stars_display = get_stars_display(stars)
-        
-        text = (
-            f"🚗 **{car_name}**\n\n"
-            f"⭐ {stars_display} ({rarity})\n"
-            f"💰 Начальная ставка: {start_bid:,}₽\n"
-            f"💵 Текущая ставка: {current_bid:,}₽\n"
-            f"👤 Текущий лидер: {bidder_info}\n\n"
-            f"📊 Лот {page + 1}/{len(lots)}"
-        )
-        
-        keyboard = [
-            [
-                InlineKeyboardButton(text="◀", callback_data="auction_prev"),
-                InlineKeyboardButton(text="Сделать ставку", callback_data="auction_bid"),
-                InlineKeyboardButton(text="▶", callback_data="auction_next")
-            ],
-            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
-        ]
-        
+    if not lots:
         await message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
-            parse_mode="Markdown"
+            "🚗 АУКЦИОН\n\n"
+            "На данный момент нет активных лотов.\n"
+            "Загляните позже!",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
+            ])
         )
+        return
+    
+    if page < 0:
+        page = len(lots) - 1
+    elif page >= len(lots):
+        page = 0
+    
+    user_auction_page[user_id] = page
+    
+    lot = lots[page]
+    car_name = lot["car_name"]
+    stars = lot.get("stars", 1)
+    rarity = lot.get("rarity", "Доступная")
+    start_bid = lot.get("start_bid", 0)
+    current_bid = lot.get("current_bid", start_bid)
+    current_bidder = lot.get("current_bidder")
+    
+    bidder_info = "Нет ставок"
+    if current_bidder:
+        try:
+            user = await bot.get_chat(int(current_bidder))
+            bidder_info = f"@{user.username}" if user.username else f"ID: {current_bidder[:5]}..."
+        except:
+            bidder_info = f"ID: {current_bidder[:5]}..."
+    
+    stars_display = get_stars_display(stars)
+    
+    text = (
+        f"🚗 **{car_name}**\n\n"
+        f"⭐ {stars_display} ({rarity})\n"
+        f"💰 Начальная ставка: {start_bid:,}₽\n"
+        f"💵 Текущая ставка: {current_bid:,}₽\n"
+        f"👤 Текущий лидер: {bidder_info}\n\n"
+        f"📊 Лот {page + 1}/{len(lots)}"
+    )
+    
+    keyboard = [
+        [
+            InlineKeyboardButton(text="◀", callback_data="auction_prev"),
+            InlineKeyboardButton(text="Сделать ставку", callback_data="auction_bid"),
+            InlineKeyboardButton(text="▶", callback_data="auction_next")
+        ],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
+    ]
+    
+    await message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
+        parse_mode="Markdown"
+    )
+
+def register_auction_handlers(dp):
     
     @dp.callback_query(F.data == "auction")
     async def auction_menu(callback: types.CallbackQuery, state: FSMContext):
@@ -188,7 +192,7 @@ def register_auction_handlers(dp):
         await callback.answer()
 
     # ==========================================
-    # ===== ИСПРАВЛЕНИЕ: ДОБАВЛЕН ОБРАБОТЧИК =====
+    # ===== ОБРАБОТЧИК ВВОДА СТАВКИ =====
     # ==========================================
 
     @dp.message(AuctionStates.waiting_for_auction_bid)
@@ -205,7 +209,6 @@ def register_auction_handlers(dp):
         
         try:
             # Попытка получить число из сообщения
-            # Поддерживаем разные форматы: 1000000, 1 000 000, 1,000,000
             bid_amount = int(message.text.replace(' ', '').replace(',', ''))
         except ValueError:
             await message.answer(
@@ -290,4 +293,4 @@ def register_auction_handlers(dp):
 __all__ = [
     'show_auction_lot',
     'register_auction_handlers'
-            ]
+    ]
