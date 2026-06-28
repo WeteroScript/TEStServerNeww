@@ -2,29 +2,39 @@ import random
 from datetime import datetime
 from typing import Dict, Tuple
 
-from config import BUSINESS_CONFIG, MINE_RESOURCES, logger
+from config import BUSINESS_CONFIG, AUTO_MINE_RESOURCES, logger
 from database.file_manager import (
     load_users, save_users, load_business, save_business, 
     load_inventory, save_inventory
 )
 
 async def get_auto_mine_resource() -> str:
-    """Получает случайный ресурс для авто-шахты"""
-    resources = BUSINESS_CONFIG["auto_mine"]["resources"]
-    total_chance = sum(r["chance"] for r in resources)
+    """Получает случайный ресурс для авто-шахты (шансы снижены на 2%)"""
+    resources = AUTO_MINE_RESOURCES  # ← ИСПОЛЬЗУЕМ ОТДЕЛЬНЫЙ СПИСОК С ПОНИЖЕННЫМИ ЦЕНАМИ
+    
+    # Урезаем шансы на 2%
+    modified_resources = []
+    for res in resources:
+        modified_resources.append({
+            "name": res["name"],
+            "chance": max(0.001, res["chance"] - 0.02)
+        })
+    
+    total_chance = sum(r["chance"] for r in modified_resources)
+    if total_chance <= 0:
+        return resources[0]["name"]
+    
     roll = random.random() * total_chance
     cumulative = 0
-    for res in resources:
+    for res in modified_resources:
         cumulative += res["chance"]
         if roll <= cumulative:
             return res["name"]
-    return random.choice(resources)["name"]
+    return modified_resources[-1]["name"]
+
 
 async def collect_business(user_id: str) -> Tuple[Dict, str]:
-    """
-    Собирает доход со всех бизнесов пользователя
-    Возвращает: (обновленный пользователь, сообщение для вывода)
-    """
+    """Собирает доход со всех бизнесов пользователя"""
     users = await load_users()
     user = users.get(user_id, {})
     business_data = await load_business()
@@ -67,7 +77,7 @@ async def collect_business(user_id: str) -> Tuple[Dict, str]:
                 num_resources = random.randint(config["min_resources"], config["max_resources"])
                 
                 for _ in range(num_resources):
-                    resource = await get_auto_mine_resource()
+                    resource = await get_auto_mine_resource()  # ← РЕСУРСЫ С ПОНИЖЕННЫМИ ЦЕНАМИ
                     inventory[user_id].append(resource)
                     resources_collected.append(resource)
                 
@@ -81,13 +91,11 @@ async def collect_business(user_id: str) -> Tuple[Dict, str]:
             biz_data["last_collect"] = datetime.now().isoformat()
             user["business"][biz_key]["last_collect"] = datetime.now().isoformat()
     
-    # Сохраняем изменения
     users[user_id] = user
     await save_users(users)
     await save_business(business_data)
     await save_inventory(inventory)
     
-    # Формируем сообщение
     if not collected:
         return user, "❌ Нет готовых бизнесов для сбора!"
     
@@ -106,7 +114,7 @@ async def collect_business(user_id: str) -> Tuple[Dict, str]:
         message += "\n\n📦 Получены ресурсы:"
         for res_name, count in resource_counts.items():
             price = 0
-            for r in MINE_RESOURCES:
+            for r in AUTO_MINE_RESOURCES:  # ← ЦЕНЫ ИЗ АВТО-ШАХТЫ (ПОНИЖЕННЫЕ)
                 if r["name"] == res_name:
                     price = r["price"]
                     break
@@ -119,10 +127,9 @@ async def collect_business(user_id: str) -> Tuple[Dict, str]:
     
     return user, message
 
+
 async def get_business_status(user_id: str) -> Dict:
-    """
-    Получает статус всех бизнесов пользователя
-    """
+    """Получает статус всех бизнесов пользователя"""
     users = await load_users()
     user = users.get(user_id, {})
     user_business = user.get("business", {})
@@ -172,19 +179,16 @@ async def get_business_status(user_id: str) -> Dict:
     
     return status
 
+
 async def get_user_business_count(user_id: str) -> int:
-    """
-    Получает количество бизнесов у пользователя
-    """
+    """Получает количество бизнесов у пользователя"""
     users = await load_users()
     user = users.get(user_id, {})
     return sum(1 for biz in user.get("business", {}).values() if biz.get("owned", False))
 
+
 async def sell_business(user_id: str, business_key: str) -> Tuple[bool, str, int]:
-    """
-    Продает бизнес пользователя
-    Возвращает: (успех, сообщение, цена продажи)
-    """
+    """Продает бизнес пользователя"""
     users = await load_users()
     user = users.get(user_id, {})
     business_data = await load_business()
@@ -202,12 +206,10 @@ async def sell_business(user_id: str, business_key: str) -> Tuple[bool, str, int
     
     sell_price = int(config["price"] * 0.5)
     
-    # Удаляем бизнес у пользователя
     user["business"][business_key]["owned"] = False
     user["business"][business_key]["last_collect"] = None
     user["business"][business_key]["auto_collect"] = False
     
-    # Удаляем из владельцев в бизнес-данных
     if business_key in business_data:
         if user_id in business_data[business_key].get("owners", []):
             business_data[business_key]["owners"].remove(user_id)
@@ -221,11 +223,9 @@ async def sell_business(user_id: str, business_key: str) -> Tuple[bool, str, int
     
     return True, f"✅ Бизнес {config['emoji']} {config['name']} продан за {sell_price:,.0f}₽!", sell_price
 
+
 async def buy_business(user_id: str, business_key: str) -> Tuple[bool, str]:
-    """
-    Покупает бизнес пользователю
-    Возвращает: (успех, сообщение)
-    """
+    """Покупает бизнес пользователю"""
     users = await load_users()
     user = users.get(user_id, {})
     business_data = await load_business()
@@ -234,12 +234,10 @@ async def buy_business(user_id: str, business_key: str) -> Tuple[bool, str]:
     if not config:
         return False, "❌ Бизнес не найден!"
     
-    # Проверяем количество бизнесов
     user_business_count = await get_user_business_count(user_id)
     if user_business_count >= 1:
         return False, "❌ У вас уже есть 1 бизнес! (максимум 1)"
     
-    # Проверяем свободные места
     owners = business_data.get(business_key, {}).get("owners", [])
     if len(owners) >= config["max_owners"]:
         return False, "❌ Все места заняты!"
@@ -250,7 +248,6 @@ async def buy_business(user_id: str, business_key: str) -> Tuple[bool, str]:
     if user.get("money", 0) < config["price"]:
         return False, f"❌ Недостаточно средств! Нужно {config['price']:,.0f}₽"
     
-    # Покупаем бизнес
     user["money"] -= config["price"]
     
     if "business" not in user:
@@ -270,11 +267,9 @@ async def buy_business(user_id: str, business_key: str) -> Tuple[bool, str]:
     
     return True, f"✅ Вы купили {config['emoji']} {config['name']} за {config['price']:,.0f}₽!"
 
+
 async def toggle_auto_collect(user_id: str, business_key: str) -> Tuple[bool, str, bool]:
-    """
-    Включает/выключает авто-сбор бизнеса
-    Возвращает: (успех, сообщение, новый статус)
-    """
+    """Включает/выключает авто-сбор бизнеса"""
     users = await load_users()
     user = users.get(user_id, {})
     
