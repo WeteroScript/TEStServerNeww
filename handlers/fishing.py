@@ -56,12 +56,11 @@ FISHING_RODS = {
     }
 }
 
-# Снасти
+# Снасти (НЕ ТРАТЯТСЯ!)
 FISHING_TACKLE = {
     "galactic": {
         "name": "Галактическая снасть",
         "emoji": "🚀",
-        "uses": 25,
         "price": 7500000000,
         "criteria": {"rod": "galactic"},
         "level": 5
@@ -69,7 +68,6 @@ FISHING_TACKLE = {
     "volcanic": {
         "name": "Вулканическая снасть",
         "emoji": "🌋",
-        "uses": 10,
         "price": 1500000000,
         "criteria": {"rod": "volcanic"},
         "level": 4
@@ -77,7 +75,6 @@ FISHING_TACKLE = {
     "legendary": {
         "name": "Легендарная снасть",
         "emoji": "⭐",
-        "uses": 5,
         "price": 350000000,
         "criteria": {"rod": "legendary"},
         "level": 3
@@ -85,7 +82,6 @@ FISHING_TACKLE = {
     "rare": {
         "name": "Редкая снасть",
         "emoji": "🔮",
-        "uses": 1,
         "price": 75000000,
         "criteria": {"rod": "rare"},
         "level": 2
@@ -93,14 +89,13 @@ FISHING_TACKLE = {
     "basic": {
         "name": "Базовая снасть",
         "emoji": "🎣",
-        "uses": 1,
         "price": 0,
         "criteria": {"default": True},
         "level": 1
     }
 }
 
-# Приманки (сгруппированы по удочкам) - 5 штук для каждой
+# Приманки (5 штук для каждой удочки)
 FISHING_BAITS = {
     "galactic": [
         {"name": "Квантовая крошка", "price": 500000000, "bonus": 40},
@@ -205,8 +200,6 @@ def register_fishing_handlers(dp):
             "rod": "basic",
             "tackle": "basic",
             "bait": None,
-            "baits_inventory": [],
-            "tackle_uses": 1,
             "fish_caught": 0,
             "total_fish": 0,
             "fish_inventory": {},
@@ -227,55 +220,62 @@ def register_fishing_handlers(dp):
         inventory = await load_inventory()
         return inventory.get(user_id, [])
     
-    async def add_bait_to_inventory(user_id: str, bait_name: str):
-        """Добавляет приманку в инвентарь"""
+    async def add_to_inventory(user_id: str, item: str):
+        """Добавляет предмет в инвентарь"""
         inventory = await load_inventory()
         if user_id not in inventory:
             inventory[user_id] = []
-        inventory[user_id].append(f"Приманка: {bait_name}")
+        inventory[user_id].append(item)
         await save_inventory(inventory)
     
-    async def remove_bait_from_inventory(user_id: str, bait_name: str) -> bool:
-        """Удаляет приманку из инвентаря"""
+    async def remove_from_inventory(user_id: str, item: str) -> bool:
+        """Удаляет предмет из инвентаря"""
         inventory = await load_inventory()
         if user_id not in inventory:
             return False
-        item = f"Приманка: {bait_name}"
         if item in inventory[user_id]:
             inventory[user_id].remove(item)
             await save_inventory(inventory)
             return True
         return False
     
-    def get_rod_level(rod_key: str) -> int:
-        return FISHING_RODS.get(rod_key, {}).get("level", 1)
-    
-    def get_tackle_level(tackle_key: str) -> int:
-        return FISHING_TACKLE.get(tackle_key, {}).get("level", 1)
-    
     def get_fish(rod_key: str, bait_bonus: int = 0) -> dict:
-        """Ловит рыбу с учётом приманки"""
-        rod = FISHING_RODS.get(rod_key, FISHING_RODS["basic"])
+        """Ловит рыбу с учётом приманки (бонус увеличивает шанс на редкую рыбу)"""
         fish_list = FISH_DATA.get(rod_key, FISH_DATA["basic"])
         
-        # Базовая вероятность + бонус от приманки
-        base_chance = rod["base_chance"]
-        total_chance = min(base_chance + bait_bonus, 99)  # Максимум 99%
-        
-        # Проверяем, поймали ли рыбу
-        roll = random.randint(1, 100)
-        if roll > total_chance:
-            return None
-        
-        # Выбираем рыбу по шансам
-        total_fish_chance = sum(f["chance"] for f in fish_list)
-        roll_fish = random.random() * total_fish_chance
-        cumulative = 0
+        # ✅ Приманка увеличивает шанс на редкую рыбу
+        # Чем выше бонус, тем больше шанс выпасть редкой рыбе
+        modified_fish_list = []
         for fish in fish_list:
+            # Увеличиваем шанс для всех рыб, но особенно для редких
+            if fish["chance"] < 10:  # Редкая рыба (шанс < 10%)
+                modified_chance = fish["chance"] * (1 + bait_bonus / 100)
+            elif fish["chance"] < 30:  # Средняя рыба (шанс 10-30%)
+                modified_chance = fish["chance"] * (1 + bait_bonus / 200)
+            else:  # Обычная рыба
+                modified_chance = fish["chance"] * (1 + bait_bonus / 300)
+            
+            modified_fish_list.append({
+                "name": fish["name"],
+                "price": fish["price"],
+                "chance": modified_chance
+            })
+        
+        # Нормализуем шансы
+        total_chance = sum(f["chance"] for f in modified_fish_list)
+        if total_chance > 0:
+            for fish in modified_fish_list:
+                fish["chance"] = fish["chance"] / total_chance * 100
+        
+        # Выбираем рыбу
+        roll = random.random() * 100
+        cumulative = 0
+        for fish in modified_fish_list:
             cumulative += fish["chance"]
-            if roll_fish <= cumulative:
+            if roll <= cumulative:
                 return fish
-        return random.choice(fish_list)
+        
+        return random.choice(modified_fish_list)
     
     # ==========================================
     # ===== ГЛАВНОЕ МЕНЮ РЫБАЛКИ =====
@@ -307,7 +307,6 @@ def register_fishing_handlers(dp):
                 f"🎣 Удочка: {rod['emoji']} {rod['name']}\n"
                 f"   🎯 Шанс: {rod['base_chance']}%\n"
                 f"🔧 Снасть: {tackle['emoji']} {tackle['name']}\n"
-                f"   🎯 Осталось использований: {fishing.get('tackle_uses', 0)}\n"
                 f"🐛 Приманка: {bait_name}\n"
                 f"🐟 Поймано рыб: {fishing.get('fish_caught', 0)}\n"
                 f"📦 Всего рыб: {fishing.get('total_fish', 0)}\n\n"
@@ -348,16 +347,8 @@ def register_fishing_handlers(dp):
             fishing = await get_fishing_data(user_id)
             
             rod_key = fishing.get("rod", "basic")
-            tackle_key = fishing.get("tackle", "basic")
+            rod = FISHING_RODS.get(rod_key, FISHING_RODS["basic"])
             bait_name = fishing.get("bait")
-            
-            # Проверяем снасть
-            tackle = FISHING_TACKLE.get(tackle_key, FISHING_TACKLE["basic"])
-            uses = fishing.get("tackle_uses", 0)
-            
-            if uses <= 0:
-                await callback.answer("❌ У вас закончились снасти! Купите новые в магазине.", show_alert=True)
-                return
             
             # Проверяем приманку (если выбрана)
             bait_bonus = 0
@@ -378,15 +369,13 @@ def register_fishing_handlers(dp):
                     await callback.answer("❌ У вас нет выбранной приманки! Приманка используется 1 раз.", show_alert=True)
                     return
                 
-                # Тратим приманку
-                inventory.remove(bait_item)
-                await save_inventory(inventory)
+                # ✅ Тратим приманку
+                await remove_from_inventory(user_id, bait_item)
             
-            # Ловим рыбу
+            # ✅ Снасть НЕ ТРАТИТСЯ!
+            
+            # Ловим рыбу (бонус приманки увеличивает шанс на редкую рыбу)
             fish = get_fish(rod_key, bait_bonus)
-            
-            # Тратим снасть
-            fishing["tackle_uses"] = uses - 1
             
             if fish:
                 # Сохраняем рыбу в инвентарь
@@ -400,7 +389,6 @@ def register_fishing_handlers(dp):
                 fishing["fish_caught"] = fishing.get("fish_caught", 0) + 1
                 fishing["total_fish"] = fishing.get("total_fish", 0) + 1
                 
-                # Сохраняем улов в fish_inventory
                 if "fish_inventory" not in fishing:
                     fishing["fish_inventory"] = {}
                 fishing["fish_inventory"][fish["name"]] = fishing["fish_inventory"].get(fish["name"], 0) + 1
@@ -414,7 +402,7 @@ def register_fishing_handlers(dp):
                     f"🐟 {fish['name']}\n"
                     f"💰 Цена: {fish['price']:,.0f}₽\n"
                     f"📊 Шанс: {rod['base_chance']}%{bonus_text}\n"
-                    f"🔧 Осталось снастей: {fishing['tackle_uses']}"
+                    f"🐛 Приманка использована"
                 )
             else:
                 await save_fishing_data(user_id, fishing)
@@ -425,7 +413,7 @@ def register_fishing_handlers(dp):
                     f"🎣 **НИЧЕГО НЕ ПОЙМАЛИ!**\n\n"
                     f"😔 Рыба ушла...\n"
                     f"📊 Шанс: {rod['base_chance']}%{bonus_text}\n"
-                    f"🔧 Осталось снастей: {fishing['tackle_uses']}"
+                    f"🐛 Приманка использована"
                 )
             
             await callback.message.edit_text(
@@ -443,7 +431,7 @@ def register_fishing_handlers(dp):
         await callback.answer()
     
     # ==========================================
-    # ===== МАГАЗИН =====
+    # ===== МАГАЗИН (С КНОПКАМИ!) =====
     # ==========================================
     
     @dp.callback_query(F.data == "fishing_shop")
@@ -471,7 +459,7 @@ def register_fishing_handlers(dp):
         await callback.answer()
     
     # ==========================================
-    # ===== УДОЧКИ =====
+    # ===== УДОЧКИ (С КНОПКАМИ ПОКУПКИ) =====
     # ==========================================
     
     @dp.callback_query(F.data == "fishing_rods")
@@ -528,10 +516,6 @@ def register_fishing_handlers(dp):
         
         await callback.answer()
     
-    # ==========================================
-    # ===== ВЫБРАТЬ УДОЧКУ =====
-    # ==========================================
-    
     @dp.callback_query(F.data.startswith("fishing_select_rod_"))
     async def fishing_select_rod(callback: types.CallbackQuery):
         if not await check_access(callback):
@@ -554,10 +538,6 @@ def register_fishing_handlers(dp):
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
-    
-    # ==========================================
-    # ===== КУПИТЬ УДОЧКУ =====
-    # ==========================================
     
     @dp.callback_query(F.data.startswith("fishing_buy_rod_"))
     async def fishing_buy_rod(callback: types.CallbackQuery):
@@ -599,7 +579,7 @@ def register_fishing_handlers(dp):
         await callback.answer()
     
     # ==========================================
-    # ===== СНАСТИ =====
+    # ===== СНАСТИ (С КНОПКАМИ ПОКУПКИ) =====
     # ==========================================
     
     @dp.callback_query(F.data == "fishing_tackle")
@@ -622,7 +602,6 @@ def register_fishing_handlers(dp):
                 
                 status = "✅ ВЫБРАНА" if is_current else "✅ Есть" if is_owned else "❌ Нет"
                 text += f"{tackle['emoji']} {tackle['name']} - {status}\n"
-                text += f"   🎯 Использований: {tackle['uses']}\n"
                 
                 if key != "basic":
                     criteria = tackle.get("criteria", {})
@@ -666,10 +645,6 @@ def register_fishing_handlers(dp):
         
         await callback.answer()
     
-    # ==========================================
-    # ===== ВЫБРАТЬ СНАСТЬ =====
-    # ==========================================
-    
     @dp.callback_query(F.data.startswith("fishing_select_tackle_"))
     async def fishing_select_tackle(callback: types.CallbackQuery):
         if not await check_access(callback):
@@ -681,26 +656,17 @@ def register_fishing_handlers(dp):
             fishing = await get_fishing_data(user_id)
             
             fishing["tackle"] = tackle_key
-            tackle = FISHING_TACKLE.get(tackle_key, FISHING_TACKLE["basic"])
-            
-            if tackle_key != "basic":
-                fishing["tackle_uses"] = tackle["uses"]
-            else:
-                fishing["tackle_uses"] = 999
-            
             await save_fishing_data(user_id, fishing)
             
+            tackle = FISHING_TACKLE.get(tackle_key, FISHING_TACKLE["basic"])
             await callback.answer(f"✅ Выбрана {tackle['name']}!", show_alert=True)
+            
             await fishing_tackle(callback)
         except Exception as e:
             logger.error(f"Ошибка в fishing_select_tackle: {e}")
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
-    
-    # ==========================================
-    # ===== КУПИТЬ СНАСТЬ =====
-    # ==========================================
     
     @dp.callback_query(F.data.startswith("fishing_buy_tackle_"))
     async def fishing_buy_tackle(callback: types.CallbackQuery):
@@ -742,7 +708,7 @@ def register_fishing_handlers(dp):
         await callback.answer()
     
     # ==========================================
-    # ===== ПРИМАНКИ (ГЛАВНОЕ МЕНЮ) =====
+    # ===== ПРИМАНКИ (С КНОПКАМИ ПОКУПКИ) =====
     # ==========================================
     
     @dp.callback_query(F.data == "fishing_baits")
@@ -770,10 +736,6 @@ def register_fishing_handlers(dp):
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
-    
-    # ==========================================
-    # ===== ПРИМАНКИ (КАТЕГОРИИ) =====
-    # ==========================================
     
     @dp.callback_query(F.data.startswith("fishing_baits_"))
     async def fishing_baits_category(callback: types.CallbackQuery):
@@ -814,10 +776,6 @@ def register_fishing_handlers(dp):
         
         await callback.answer()
     
-    # ==========================================
-    # ===== КУПИТЬ ПРИМАНКУ =====
-    # ==========================================
-    
     @dp.callback_query(F.data.startswith("fishing_buy_bait_"))
     async def fishing_buy_bait(callback: types.CallbackQuery):
         if not await check_access(callback):
@@ -826,7 +784,8 @@ def register_fishing_handlers(dp):
         try:
             parts = callback.data.split("_")
             category = parts[3]
-            bait_name = "_".join(parts[4:-1])  # Название может содержать пробелы
+            # Название может содержать пробелы (восстанавливаем)
+            bait_name = "_".join(parts[4:-1])
             price = int(parts[-1])
             
             user_id = str(callback.from_user.id)
@@ -842,7 +801,7 @@ def register_fishing_handlers(dp):
             await save_users(users)
             
             # Добавляем приманку в инвентарь
-            await add_bait_to_inventory(user_id, bait_name)
+            await add_to_inventory(user_id, f"Приманка: {bait_name}")
             
             await callback.answer(f"✅ Куплена приманка: {bait_name}!", show_alert=True)
             await fishing_baits_category(callback)
@@ -891,7 +850,7 @@ def register_fishing_handlers(dp):
             keyboard = []
             
             if baits_inventory:
-                for bait_name in baits_inventory[:10]:  # Показываем первые 10
+                for bait_name in baits_inventory[:10]:
                     is_selected = bait_name == current_bait
                     keyboard.append([InlineKeyboardButton(
                         text=f"{'✅' if is_selected else '🐛'} {bait_name}",
@@ -919,10 +878,6 @@ def register_fishing_handlers(dp):
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
-    
-    # ==========================================
-    # ===== ВЫБРАТЬ ПРИМАНКУ =====
-    # ==========================================
     
     @dp.callback_query(F.data.startswith("fishing_select_bait_"))
     async def fishing_select_bait(callback: types.CallbackQuery):
@@ -952,10 +907,6 @@ def register_fishing_handlers(dp):
         
         await callback.answer()
     
-    # ==========================================
-    # ===== СНЯТЬ ПРИМАНКУ =====
-    # ==========================================
-    
     @dp.callback_query(F.data == "fishing_remove_bait")
     async def fishing_remove_bait(callback: types.CallbackQuery):
         if not await check_access(callback):
@@ -980,7 +931,7 @@ def register_fishing_handlers(dp):
         await callback.answer("Купите приманки в магазине!", show_alert=True)
     
     # ==========================================
-    # ===== СТАТИСТИКА РЫБАЛКИ =====
+    # ===== СТАТИСТИКА =====
     # ==========================================
     
     @dp.callback_query(F.data == "fishing_stats")
@@ -1048,16 +999,16 @@ def register_fishing_handlers(dp):
                 "3. ⭐ Легендарная (70%) - 250 рыб, 500,000,000₽\n"
                 "4. 🔮 Редкая (65%) - 50 рыб, 150,000,000₽\n"
                 "5. 🎣 Базовая (55%) - бесплатно\n\n"
-                "**🔧 СНАСТИ:**\n"
-                "1. 🚀 Галактическая - 25 попыток, 7,500,000,000₽\n"
-                "2. 🌋 Вулканическая - 10 попыток, 1,500,000,000₽\n"
-                "3. ⭐ Легендарная - 5 попыток, 350,000,000₽\n"
-                "4. 🔮 Редкая - 1 попытка, 75,000,000₽\n"
-                "5. 🎣 Базовая - 1 попытка, бесплатно\n\n"
-                "**🐛 ПРИМАНКИ:**\n"
-                "Увеличивают шанс на поимку рыбы.\n"
-                "Каждая приманка используется 1 раз.\n"
-                "Доступны в магазине.\n"
+                "**🔧 СНАСТИ (НЕ ТРАТЯТСЯ!):**\n"
+                "1. 🚀 Галактическая - 7,500,000,000₽\n"
+                "2. 🌋 Вулканическая - 1,500,000,000₽\n"
+                "3. ⭐ Легендарная - 350,000,000₽\n"
+                "4. 🔮 Редкая - 75,000,000₽\n"
+                "5. 🎣 Базовая - бесплатно\n\n"
+                "**🐛 ПРИМАНКИ (ТРАТЯТСЯ 1 РАЗ):**\n"
+                "Увеличивают шанс на поимку РЕДКОЙ рыбы.\n"
+                "Чем выше бонус → тем больше шанс редкой рыбы.\n"
+                "Доступны в магазине по 5 штук на удочку.\n"
                 "Для использования выберите в настройках.\n\n"
                 "**🐟 РЫБЫ:**\n"
                 "Разные рыбы для каждой удочки.\n"
