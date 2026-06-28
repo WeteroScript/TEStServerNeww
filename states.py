@@ -21,3 +21,11 @@ class CasinoStates(StatesGroup):
     waiting_for_casino_bet = State()
     waiting_for_mines_count = State()
     waiting_for_field_size = State()
+
+# ==========================================
+# ===== ДОПОЛНИТЕЛЬНЫЕ СОСТОЯНИЯ =====
+# ==========================================
+
+class DonateStates(StatesGroup):
+    """Состояния для доната"""
+    waiting_for_brcoin_convert = State()
