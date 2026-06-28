@@ -20,7 +20,8 @@ FISHING_RODS = {
         "base_chance": 95,
         "price": 20000000000,
         "criteria": {"fish_caught": 1500},
-        "level": 5
+        "level": 5,
+        "fish_per_cast": 10  # Количество рыбы за одну рыбалку
     },
     "volcanic": {
         "name": "Вулканическая удочка",
@@ -28,7 +29,8 @@ FISHING_RODS = {
         "base_chance": 85,
         "price": 1500000000,
         "criteria": {"fish_caught": 750},
-        "level": 4
+        "level": 4,
+        "fish_per_cast": 5
     },
     "legendary": {
         "name": "Легендарная удочка",
@@ -36,7 +38,8 @@ FISHING_RODS = {
         "base_chance": 70,
         "price": 500000000,
         "criteria": {"fish_caught": 250},
-        "level": 3
+        "level": 3,
+        "fish_per_cast": 3
     },
     "rare": {
         "name": "Редкая удочка",
@@ -44,7 +47,8 @@ FISHING_RODS = {
         "base_chance": 65,
         "price": 150000000,
         "criteria": {"fish_caught": 50},
-        "level": 2
+        "level": 2,
+        "fish_per_cast": 1
     },
     "basic": {
         "name": "Базовая удочка",
@@ -52,46 +56,52 @@ FISHING_RODS = {
         "base_chance": 55,
         "price": 0,
         "criteria": {"default": True},
-        "level": 1
+        "level": 1,
+        "fish_per_cast": 1
     }
 }
 
-# Снасти (НЕ ТРАТЯТСЯ!)
+# Снасти (НЕ ТРАТЯТСЯ, но могут сломаться!)
 FISHING_TACKLE = {
     "galactic": {
         "name": "Галактическая снасть",
         "emoji": "🚀",
         "price": 7500000000,
         "criteria": {"rod": "galactic"},
-        "level": 5
+        "level": 5,
+        "break_chance": 0.05  # 5% шанс поломки
     },
     "volcanic": {
         "name": "Вулканическая снасть",
         "emoji": "🌋",
         "price": 1500000000,
         "criteria": {"rod": "volcanic"},
-        "level": 4
+        "level": 4,
+        "break_chance": 0.05
     },
     "legendary": {
         "name": "Легендарная снасть",
         "emoji": "⭐",
         "price": 350000000,
         "criteria": {"rod": "legendary"},
-        "level": 3
+        "level": 3,
+        "break_chance": 0.05
     },
     "rare": {
         "name": "Редкая снасть",
         "emoji": "🔮",
         "price": 75000000,
         "criteria": {"rod": "rare"},
-        "level": 2
+        "level": 2,
+        "break_chance": 0.05
     },
     "basic": {
         "name": "Базовая снасть",
         "emoji": "🎣",
         "price": 0,
         "criteria": {"default": True},
-        "level": 1
+        "level": 1,
+        "break_chance": 0
     }
 }
 
@@ -226,7 +236,6 @@ def register_fishing_handlers(dp):
                 continue
 
             if key == "bait":
-                # bait может быть None или str
                 if fishing[key] is not None and not isinstance(fishing[key], str):
                     fishing[key] = None
                 continue
@@ -397,7 +406,9 @@ def register_fishing_handlers(dp):
                 f"🎣 **РЫБАЛКА**\n\n"
                 f"🎣 Удочка: {rod['emoji']} {rod['name']}\n"
                 f"   🎯 Шанс: {rod['base_chance']}%\n"
+                f"   🐟 Рыб за раз: {rod.get('fish_per_cast', 1)}\n"
                 f"🔧 Снасть: {tackle['emoji']} {tackle['name']}\n"
+                f"   💥 Шанс поломки: {int(tackle.get('break_chance', 0) * 100)}%\n"
                 f"🐛 Приманка: {bait_name}\n"
                 f"🐟 Поймано рыб: {fishing.get('fish_caught', 0)}\n"
                 f"📦 Всего рыб: {fishing.get('total_fish', 0)}\n\n"
@@ -439,9 +450,26 @@ def register_fishing_handlers(dp):
 
             rod_key = fishing.get("rod", "basic")
             rod = FISHING_RODS.get(rod_key, FISHING_RODS["basic"])
+            tackle_key = fishing.get("tackle", "basic")
             bait_name = fishing.get("bait")
 
+            # Проверка снасти на поломку (5%)
+            tackle = FISHING_TACKLE.get(tackle_key, FISHING_TACKLE["basic"])
+            break_chance = tackle.get("break_chance", 0)
+            
+            tackle_broken = False
+            if break_chance > 0 and random.random() < break_chance:
+                tackle_broken = True
+                # Удаляем снасть у пользователя
+                if "tackles" in fishing and tackle_key in fishing["tackles"]:
+                    del fishing["tackles"][tackle_key]
+                # Сбрасываем на базовую снасть
+                fishing["tackle"] = "basic"
+                await save_fishing_data(user_id, fishing)
+
+            # Проверяем приманку
             bait_bonus = 0
+            bait_used = False
             if bait_name:
                 inventory = await get_fishing_inventory(user_id)
                 bait_item = f"Приманка: {bait_name}"
@@ -453,50 +481,60 @@ def register_fishing_handlers(dp):
 
                 bait_bonus = get_bait_bonus(bait_name)
                 if bait_bonus == 0 and bait_name:
-                    logger.warning(f"Некорректная приманка для пользователя {user_id}: {bait_name}")
                     fishing["bait"] = None
                     await save_fishing_data(user_id, fishing)
                     await callback.answer("⚠️ Приманка повреждена, выбор отменён.", show_alert=True)
                     return
 
+                # Тратим приманку (1 шт = 1 рыбалка)
                 await remove_from_inventory(user_id, bait_item)
+                bait_used = True
 
-            # Проверяем шанс поймать рыбу
+            # Количество рыб за одну рыбалку
+            fish_per_cast = rod.get("fish_per_cast", 1)
             catch_chance = rod["base_chance"] + bait_bonus
             catch_chance = min(catch_chance, 100)
-            roll = random.randint(1, 100)
 
-            if roll <= catch_chance:
-                fish = get_fish(rod_key, bait_bonus)
+            caught_fish = []
+            total_price = 0
 
-                await add_to_inventory(user_id, fish["name"])
+            for _ in range(fish_per_cast):
+                roll = random.randint(1, 100)
 
-                fishing["fish_caught"] = fishing.get("fish_caught", 0) + 1
-                fishing["total_fish"] = fishing.get("total_fish", 0) + 1
+                if roll <= catch_chance:
+                    fish = get_fish(rod_key, bait_bonus)
+                    await add_to_inventory(user_id, fish["name"])
+                    caught_fish.append(fish)
+                    total_price += fish["price"]
 
-                if "fish_inventory" not in fishing:
-                    fishing["fish_inventory"] = {}
-                fishing["fish_inventory"][fish["name"]] = fishing["fish_inventory"].get(fish["name"], 0) + 1
+                    fishing["fish_caught"] = fishing.get("fish_caught", 0) + 1
+                    fishing["total_fish"] = fishing.get("total_fish", 0) + 1
 
-                await save_fishing_data(user_id, fishing)
+                    if "fish_inventory" not in fishing:
+                        fishing["fish_inventory"] = {}
+                    fishing["fish_inventory"][fish["name"]] = fishing["fish_inventory"].get(fish["name"], 0) + 1
 
-                bonus_text = f" (+{bait_bonus}% от приманки)" if bait_bonus > 0 else ""
+            await save_fishing_data(user_id, fishing)
 
+            # Формируем сообщение
+            bonus_text = f" (+{bait_bonus}% от приманки)" if bait_bonus > 0 else ""
+            tackle_break_text = "\n\n💥 **СНАСТЬ СЛОМАЛАСЬ!**\nПридётся купить новую в магазине." if tackle_broken else ""
+
+            if caught_fish:
+                fish_text = "\n".join([f"🐟 {f['name']} ({f['price']:,.0f}₽)" for f in caught_fish])
                 text = (
                     f"🎣 **УЛОВ!**\n\n"
-                    f"🐟 {fish['name']}\n"
-                    f"💰 Цена: {fish['price']:,.0f}₽\n"
+                    f"{fish_text}\n\n"
+                    f"💰 Всего: {total_price:,.0f}₽\n"
                     f"📊 Шанс поимки: {catch_chance}%{bonus_text}"
+                    f"{tackle_break_text}"
                 )
             else:
-                await save_fishing_data(user_id, fishing)
-
-                bonus_text = f" (+{bait_bonus}% от приманки)" if bait_bonus > 0 else ""
-
                 text = (
                     f"🎣 **НИЧЕГО НЕ ПОЙМАЛИ!**\n\n"
                     f"😔 Рыба ушла...\n"
                     f"📊 Шанс поимки: {catch_chance}%{bonus_text}"
+                    f"{tackle_break_text}"
                 )
 
             await callback.message.edit_text(
@@ -565,6 +603,7 @@ def register_fishing_handlers(dp):
                 status = "✅ ВЫБРАНА" if is_current else "✅ Есть" if is_owned else "❌ Нет"
                 text += f"{rod['emoji']} {rod['name']} - {status}\n"
                 text += f"   🎯 Шанс: {rod['base_chance']}%\n"
+                text += f"   🐟 Рыб за раз: {rod.get('fish_per_cast', 1)}\n"
 
                 if key != "basic":
                     criteria = rod.get("criteria", {})
@@ -708,6 +747,7 @@ def register_fishing_handlers(dp):
 
                 status = "✅ ВЫБРАНА" if is_current else "✅ Есть" if is_owned else "❌ Нет"
                 text += f"{tackle['emoji']} {tackle['name']} - {status}\n"
+                text += f"   💥 Шанс поломки: {int(tackle.get('break_chance', 0) * 100)}%\n"
 
                 if key != "basic":
                     criteria = tackle.get("criteria", {})
@@ -882,11 +922,9 @@ def register_fishing_handlers(dp):
                 await callback.answer("❌ Нет приманок в этой категории!", show_alert=True)
                 return
 
-            # Получаем инвентарь для отображения количества
             user_id = str(callback.from_user.id)
             inventory = await get_fishing_inventory(user_id)
 
-            # Считаем количество каждой приманки в инвентаре
             bait_counts = {}
             for item in inventory:
                 if item.startswith("Приманка: "):
@@ -936,9 +974,8 @@ def register_fishing_handlers(dp):
             return
 
         try:
-            # Формат: fsh_bbuy_{category}_{idx}
             data = callback.data.replace("fsh_bbuy_", "")
-            parts = data.rsplit("_", 1)  # Разбиваем с конца, чтобы не сломать категорию
+            parts = data.rsplit("_", 1)
 
             if len(parts) != 2:
                 await callback.answer("❌ Ошибка при покупке!", show_alert=True)
@@ -986,7 +1023,6 @@ def register_fishing_handlers(dp):
                 show_alert=True
             )
 
-            # Обновляем страницу категории
             await fishing_baits_category(callback)
         except Exception as e:
             logger.error(f"Ошибка в fishing_buy_bait: {e}", exc_info=True)
@@ -1015,7 +1051,6 @@ def register_fishing_handlers(dp):
 
             inventory = await get_fishing_inventory(user_id)
 
-            # Считаем уникальные приманки и их количество
             bait_counts = {}
             for item in inventory:
                 if item.startswith("Приманка: "):
@@ -1080,7 +1115,6 @@ def register_fishing_handlers(dp):
 
             inventory = await get_fishing_inventory(user_id)
 
-            # Собираем уникальные приманки
             bait_counts = {}
             for item in inventory:
                 if item.startswith("Приманка: "):
@@ -1189,11 +1223,15 @@ def register_fishing_handlers(dp):
             text = (
                 "ℹ️ **ИНФОРМАЦИЯ О РЫБАЛКЕ**\n\n"
                 "**🎣 УДОЧКИ:**\n"
-                "1. 🚀 Галактическая (95%) - 1500 рыб, 20B₽\n"
-                "2. 🌋 Вулканическая (85%) - 750 рыб, 1.5B₽\n"
-                "3. ⭐ Легендарная (70%) - 250 рыб, 500M₽\n"
-                "4. 🔮 Редкая (65%) - 50 рыб, 150M₽\n"
-                "5. 🎣 Базовая (55%) - бесплатно\n\n"
+                "1. 🚀 Галактическая (95%) - 1500 рыб, 20B₽, 10 рыб/раз\n"
+                "2. 🌋 Вулканическая (85%) - 750 рыб, 1.5B₽, 5 рыб/раз\n"
+                "3. ⭐ Легендарная (70%) - 250 рыб, 500M₽, 3 рыбы/раз\n"
+                "4. 🔮 Редкая (65%) - 50 рыб, 150M₽, 1 рыба/раз\n"
+                "5. 🎣 Базовая (55%) - бесплатно, 1 рыба/раз\n\n"
+                "**🔧 СНАСТИ:**\n"
+                "• Дают доступ к удочкам\n"
+                "• Есть 5% шанс поломки при рыбалке!\n"
+                "• При поломке нужно покупать новую\n\n"
                 "**🐛 ПРИМАНКИ (тратятся 1 раз):**\n"
                 "• Увеличивают шанс редкой рыбы\n"
                 "• Выбираются в настройках\n"
