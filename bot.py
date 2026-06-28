@@ -14,7 +14,8 @@ from handlers import (
     register_business_handlers,
     register_casino_handlers,
     register_jobs_handlers,
-    register_auction_handlers
+    register_auction_handlers,
+    register_fishing_handlers
 )
 
 async def main():
@@ -27,6 +28,7 @@ async def main():
     register_auction_handlers(dp)
     register_jobs_handlers(dp)
     register_casino_handlers(dp)
+    register_fishing_handlers(dp)  # ← ДОБАВЛЕНО
     register_user_handlers(dp)
     register_admin_handlers(dp)
     register_business_handlers(dp)
