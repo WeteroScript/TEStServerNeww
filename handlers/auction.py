@@ -187,6 +187,101 @@ def register_auction_handlers(dp):
         await show_auction_lot(callback.message, user_id, page)
         await callback.answer()
 
+    # ==========================================
+    # ===== ИСПРАВЛЕНИЕ: ДОБАВЛЕН ОБРАБОТЧИК =====
+    # ==========================================
+
+    @dp.message(AuctionStates.waiting_for_auction_bid)
+    async def process_auction_bid_input(message: types.Message, state: FSMContext):
+        """Обрабатывает введенную сумму ставки"""
+        if not await check_access(message):
+            await state.clear()
+            return
+        
+        if await is_function_disabled("menubutton_11"):
+            await message.answer("⛔ Аукцион временно остановлен администратором!")
+            await state.clear()
+            return
+        
+        try:
+            # Попытка получить число из сообщения
+            # Поддерживаем разные форматы: 1000000, 1 000 000, 1,000,000
+            bid_amount = int(message.text.replace(' ', '').replace(',', ''))
+        except ValueError:
+            await message.answer(
+                "❌ Ошибка! Введите корректную сумму (только цифры).\n\n"
+                "Попробуйте еще раз:"
+            )
+            return
+        
+        if bid_amount <= 0:
+            await message.answer(
+                "❌ Ставка должна быть больше нуля!\n\n"
+                "Попробуйте еще раз:"
+            )
+            return
+        
+        try:
+            # Получить данные состояния
+            data = await state.get_data()
+            lot_index = data.get('auction_page', 0)
+            user_id = str(message.from_user.id)
+            
+            # Размещаем ставку
+            success, response_message = await place_bid(user_id, lot_index, bid_amount)
+            
+            await state.clear()
+            
+            if success:
+                # Успешно размещена ставка
+                await message.answer(response_message, parse_mode="Markdown")
+                
+                # Обновляем вид аукциона
+                user_auction_page[user_id] = lot_index
+                lots = await get_active_lots()
+                
+                if lot_index < len(lots):
+                    lot = lots[lot_index]
+                    
+                    bidder_info = user_id
+                    try:
+                        user = await bot.get_chat(int(user_id))
+                        bidder_info = f"@{user.username}" if user.username else f"ID: {user_id[:5]}..."
+                    except:
+                        bidder_info = f"ID: {user_id[:5]}..."
+                    
+                    stars_display = get_stars_display(lot.get('stars', 1))
+                    
+                    # Отправляем обновленный вид лота
+                    await message.answer(
+                        f"🚗 **{lot['car_name']}**\n\n"
+                        f"⭐ {stars_display} ({lot.get('rarity', 'Доступная')})\n"
+                        f"💰 Начальная ставка: {lot.get('start_bid', 0):,}₽\n"
+                        f"💵 Текущая ставка: {lot.get('current_bid', 0):,}₽\n"
+                        f"👤 Текущий лидер: {bidder_info}\n\n"
+                        f"📊 Лот {lot_index + 1}/{len(lots)}",
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                            [
+                                InlineKeyboardButton(text="◀", callback_data="auction_prev"),
+                                InlineKeyboardButton(text="Сделать ставку", callback_data="auction_bid"),
+                                InlineKeyboardButton(text="▶", callback_data="auction_next")
+                            ],
+                            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")]
+                        ]),
+                        parse_mode="Markdown"
+                    )
+            else:
+                # Ошибка при размещении ставки
+                await message.answer(
+                    f"{response_message}\n\n"
+                    "Введите другую сумму или отмените операцию:",
+                    parse_mode="Markdown"
+                )
+        except Exception as e:
+            logger.error(f"Ошибка при обработке ставки: {e}")
+            await message.answer("❌ Произошла ошибка при обработке ставки!")
+            await state.clear()
+
 
 # ==========================================
 # ===== ЭКСПОРТ =====
