@@ -6,7 +6,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import bot, logger, ADMIN_IDS, MINE_RESOURCES, ALL_RESOURCES
+from config import bot, logger, ADMIN_IDS, MINE_RESOURCES, ALL_RESOURCES, AUTO_MINE_RESOURCES
 from database.file_manager import (
     load_users, save_users, load_inventory, save_inventory,
     load_promocodes, save_promocodes, load_settings,
@@ -1004,7 +1004,7 @@ def register_user_handlers(dp):
             await state.clear()
 
     # ==========================================
-    # ===== СКУПЩИК (С ПОНИЖЕННОЙ ЦЕНОЙ НА 40%) =====
+    # ===== СКУПЩИК (ТОЛЬКО АВТО-ШАХТА СО СКИДКОЙ 40%) =====
     # ==========================================
     
     @dp.callback_query(F.data == "buyer")
@@ -1034,6 +1034,9 @@ def register_user_handlers(dp):
                 await callback.answer()
                 return
             
+            from config import ALL_RESOURCES, AUTO_MINE_RESOURCES
+            auto_mine_names = [r["name"] for r in AUTO_MINE_RESOURCES]
+            
             resources = {}
             for item in inventory[user_id]:
                 resources[item] = resources.get(item, 0) + 1
@@ -1043,7 +1046,10 @@ def register_user_handlers(dp):
                 price = 0
                 for r in ALL_RESOURCES:
                     if r["name"] == name:
-                        price = int(r["price"] * 0.6)  # ⚠️ ЦЕНА НА 40% НИЖЕ!
+                        if name in auto_mine_names:
+                            price = int(r["price"] * 0.6)  # ⚠️ ТОЛЬКО АВТО-ШАХТА СО СКИДКОЙ 40%
+                        else:
+                            price = r["price"]  # ✅ ОСТАЛЬНОЕ ПО ПОЛНОЙ ЦЕНЕ
                         break
                 keyboard.append([InlineKeyboardButton(
                     text=f"💎 {name} ({count} шт.) - {price:,.0f}₽",
@@ -1055,7 +1061,8 @@ def register_user_handlers(dp):
             
             await callback.message.edit_text(
                 "🧙‍♀️ **СКУПЩИК**\n\n"
-                "⚠️ Цены снижены на 40%!\n\n"
+                "⚠️ Ресурсы из авто-шахты продаются со скидкой 40%!\n"
+                "✅ Ресурсы из обычной шахты и рыбалки — по полной цене!\n\n"
                 "Выберите ресурс для продажи:",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
                 parse_mode="Markdown"
@@ -1065,6 +1072,7 @@ def register_user_handlers(dp):
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
+
 
     @dp.callback_query(F.data.startswith("buyer_resource_"))
     async def buyer_resource_menu(callback: types.CallbackQuery):
@@ -1081,10 +1089,18 @@ def register_user_handlers(dp):
                 await callback.answer("❌ Ресурс не найден!", show_alert=True)
                 return
             
+            from config import ALL_RESOURCES, AUTO_MINE_RESOURCES
+            auto_mine_names = [r["name"] for r in AUTO_MINE_RESOURCES]
+            
             price = 0
+            is_auto_mine = False
             for r in ALL_RESOURCES:
                 if r["name"] == resource_name:
-                    price = int(r["price"] * 0.6)  # ⚠️ ЦЕНА НА 40% НИЖЕ!
+                    if resource_name in auto_mine_names:
+                        price = int(r["price"] * 0.6)  # ⚠️ ТОЛЬКО АВТО-ШАХТА СО СКИДКОЙ 40%
+                        is_auto_mine = True
+                    else:
+                        price = r["price"]  # ✅ ОСТАЛЬНОЕ ПО ПОЛНОЙ ЦЕНЕ
                     break
             
             if price == 0:
@@ -1092,6 +1108,8 @@ def register_user_handlers(dp):
                 return
             
             count = inventory[user_id].count(resource_name)
+            
+            price_text = f"{price:,.0f}₽ (скидка 40% для авто-шахты)" if is_auto_mine else f"{price:,.0f}₽ (полная цена)"
             
             keyboard = [
                 [InlineKeyboardButton(
@@ -1108,7 +1126,7 @@ def register_user_handlers(dp):
             await callback.message.edit_text(
                 f"💎 **{resource_name}**\n\n"
                 f"📦 В наличии: {count} шт.\n"
-                f"💰 Цена за шт.: {price:,.0f}₽ (скидка 40%)\n"
+                f"💰 Цена за шт.: {price_text}\n"
                 f"💵 Сумма за все: {count * price:,.0f}₽\n\n"
                 f"Выберите действие:",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard),
@@ -1119,6 +1137,7 @@ def register_user_handlers(dp):
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
+
 
     @dp.callback_query(F.data.startswith("buyer_sell_one_"))
     async def buyer_sell_one(callback: types.CallbackQuery):
@@ -1137,10 +1156,18 @@ def register_user_handlers(dp):
                 await callback.answer("❌ Ресурс не найден!", show_alert=True)
                 return
             
+            from config import ALL_RESOURCES, AUTO_MINE_RESOURCES
+            auto_mine_names = [r["name"] for r in AUTO_MINE_RESOURCES]
+            
             price = 0
+            is_auto_mine = False
             for r in ALL_RESOURCES:
                 if r["name"] == resource_name:
-                    price = int(r["price"] * 0.6)  # ⚠️ ЦЕНА НА 40% НИЖЕ!
+                    if resource_name in auto_mine_names:
+                        price = int(r["price"] * 0.6)
+                        is_auto_mine = True
+                    else:
+                        price = r["price"]
                     break
             
             if price == 0:
@@ -1155,9 +1182,11 @@ def register_user_handlers(dp):
             users[user_id] = user
             await save_users(users)
             
+            price_text = f"{price:,.0f}₽ (скидка 40% для авто-шахты)" if is_auto_mine else f"{price:,.0f}₽ (полная цена)"
+            
             await callback.message.edit_text(
                 f"✅ **Продано 1 шт. {resource_name}**\n\n"
-                f"💰 +{price:,.0f}₽ (цена со скидкой 40%)\n"
+                f"💰 +{price:,.0f}₽ ({price_text})\n"
                 f"💳 Новый баланс: {user['money']:,.0f}₽",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 К ресурсам", callback_data="buyer")]
@@ -1169,6 +1198,7 @@ def register_user_handlers(dp):
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
+
 
     @dp.callback_query(F.data.startswith("buyer_sell_all_"))
     async def buyer_sell_all_resource(callback: types.CallbackQuery):
@@ -1187,10 +1217,18 @@ def register_user_handlers(dp):
                 await callback.answer("❌ Ресурс не найден!", show_alert=True)
                 return
             
+            from config import ALL_RESOURCES, AUTO_MINE_RESOURCES
+            auto_mine_names = [r["name"] for r in AUTO_MINE_RESOURCES]
+            
             price = 0
+            is_auto_mine = False
             for r in ALL_RESOURCES:
                 if r["name"] == resource_name:
-                    price = int(r["price"] * 0.6)  # ⚠️ ЦЕНА НА 40% НИЖЕ!
+                    if resource_name in auto_mine_names:
+                        price = int(r["price"] * 0.6)
+                        is_auto_mine = True
+                    else:
+                        price = r["price"]
                     break
             
             if price == 0:
@@ -1212,9 +1250,11 @@ def register_user_handlers(dp):
             users[user_id] = user
             await save_users(users)
             
+            price_text = f"{price:,.0f}₽/шт (скидка 40% для авто-шахты)" if is_auto_mine else f"{price:,.0f}₽/шт (полная цена)"
+            
             await callback.message.edit_text(
                 f"✅ **Продано {count} шт. {resource_name}**\n\n"
-                f"💰 +{total_price:,.0f}₽ (цена со скидкой 40%)\n"
+                f"💰 +{total_price:,.0f}₽ ({price_text})\n"
                 f"💳 Новый баланс: {user['money']:,.0f}₽",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 К ресурсам", callback_data="buyer")]
@@ -1226,6 +1266,7 @@ def register_user_handlers(dp):
             await callback.answer("⚠️ Ошибка!", show_alert=True)
         
         await callback.answer()
+
 
     @dp.callback_query(F.data == "buyer_sell_all")
     async def buyer_sell_all(callback: types.CallbackQuery):
@@ -1242,13 +1283,19 @@ def register_user_handlers(dp):
                 await callback.answer("❌ Инвентарь пуст!", show_alert=True)
                 return
             
+            from config import ALL_RESOURCES, AUTO_MINE_RESOURCES
+            auto_mine_names = [r["name"] for r in AUTO_MINE_RESOURCES]
+            
             total_price = 0
             resource_counts = {}
             for item in inventory[user_id]:
                 price = 0
                 for r in ALL_RESOURCES:
                     if r["name"] == item:
-                        price = int(r["price"] * 0.6)  # ⚠️ ЦЕНА НА 40% НИЖЕ!
+                        if item in auto_mine_names:
+                            price = int(r["price"] * 0.6)
+                        else:
+                            price = r["price"]
                         break
                 total_price += price
                 resource_counts[item] = resource_counts.get(item, 0) + 1
@@ -1263,12 +1310,14 @@ def register_user_handlers(dp):
             
             resources_text = ""
             for name, count in resource_counts.items():
-                resources_text += f"• {name}: {count} шт.\n"
+                is_auto = name in auto_mine_names
+                price_text = "скидка 40% для авто-шахты" if is_auto else "полная цена"
+                resources_text += f"• {name}: {count} шт. ({price_text})\n"
             
             await callback.message.edit_text(
                 f"✅ **Проданы все ресурсы!**\n\n"
                 f"📦 Продано:\n{resources_text}\n"
-                f"💰 Всего получено: {total_price:,.0f}₽ (цены со скидкой 40%)\n"
+                f"💰 Всего получено: {total_price:,.0f}₽\n"
                 f"💳 Новый баланс: {user['money']:,.0f}₽",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 В меню", callback_data="back_main")]
