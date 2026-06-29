@@ -3,7 +3,7 @@ from datetime import datetime
 
 from aiogram import types, F
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.filter import StateFilter
+from aiogram.filters import StateFilter
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import bot, logger, MINE_RESOURCES
