@@ -970,7 +970,7 @@ def register_user_handlers(dp):
                 pass
 
     # ==========================================
-    # ===== ОБРАБОТЧИК КОНВЕРТАЦИИ BRcoins (ОТДЕЛЬНЫЙ!) =====
+    # ===== ОБРАБОТЧИК КОНВЕРТАЦИИ BRcoins =====
     # ==========================================
 
     @dp.message(DonateStates.waiting_for_brcoin_convert)
@@ -993,7 +993,11 @@ def register_user_handlers(dp):
             if not raw.isdigit():
                 await message.answer(
                     "❌ Введите корректное число!\n"
-                    "Например: 1, 5, 10"
+                    "Например: 1, 5, 10\n\n"
+                    "Пробелы и запятые допустимы.",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="❌ Отмена", callback_data="donate")]
+                    ])
                 )
                 return
             
@@ -1003,7 +1007,11 @@ def register_user_handlers(dp):
             if amount <= 0:
                 await message.answer(
                     "❌ Введите положительное число!\n"
-                    "Например: 1, 5, 10"
+                    "Например: 1, 5, 10\n\n"
+                    "Пробелы и запятые допустимы.",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="❌ Отмена", callback_data="donate")]
+                    ])
                 )
                 return
 
@@ -1078,21 +1086,6 @@ def register_user_handlers(dp):
                 "Пожалуйста, попробуйте позже.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
-                ])
-            )
-                "Например: 1, 5, 10\n\n"
-                "Пробелы и запятые допустимы.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="❌ Отмена", callback_data="donate")]
-                ])
-            )
-        except Exception as e:
-            logger.error(f"❌ Ошибка конвертации BRcoins: {e}")
-            await state.clear()
-            await message.answer(
-                "⚠️ Произошла ошибка при конвертации. Попробуйте ещё раз.",
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 В донат", callback_data="donate")]
                 ])
             )
 
