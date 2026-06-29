@@ -3,6 +3,7 @@ from datetime import datetime
 
 from aiogram import types, F
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.filter import StateFilter
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import bot, logger, MINE_RESOURCES
@@ -453,7 +454,7 @@ def register_jobs_handlers(dp):
     # ===== ОБРАБОТЧИК ТРЕЙДИНГА =====
     # ==========================================
     
-    @dp.message(F.text, ~F.text.startswith('/'))
+    @dp.message(StateFilter("waiting_for_trade_amount"), F.text, ~F.text.startswith('/'))
     async def process_trade_amount(message: types.Message, state: FSMContext):
         """Обработчик сумм для трейдинга"""
         current_state = await state.get_state()
