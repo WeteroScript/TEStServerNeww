@@ -267,6 +267,18 @@ def register_fishing_handlers(dp):
         logger.warning(f"Приманка не найдена: {bait_name}")
         return 0
 
+    def get_bait_category(bait_name: str = None):
+        """Получает категорию приманки (для какой удочки/снасти она предназначена) по названию"""
+        if not bait_name:
+            return None
+
+        for category, baits in FISHING_BAITS.items():
+            for bait in baits:
+                if bait["name"] == bait_name:
+                    return category
+
+        return None
+
     async def get_fishing_data(user_id: str):
         """Получает и проверяет данные рыбалки пользователя"""
         try:
@@ -400,7 +412,16 @@ def register_fishing_handlers(dp):
             rod = FISHING_RODS.get(rod_key, FISHING_RODS["basic"])
             tackle_key = fishing.get("tackle", "basic")
             tackle = FISHING_TACKLE.get(tackle_key, FISHING_TACKLE["basic"])
-            bait_name = fishing.get("bait") or "Не выбрана"
+            bait_name_display = fishing.get("bait") or "Не выбрана"
+
+            warning = ""
+            if tackle_key != rod_key:
+                warning = (
+                    f"\n⛔ **Нельзя рыбачить!** Снасть не подходит к удочке "
+                    f"(нужна «{FISHING_TACKLE.get(rod_key, FISHING_TACKLE['basic'])['name']}»).\n"
+                )
+            elif rod_key != "basic" and not fishing.get("bait"):
+                warning = "\n⛔ **Нельзя рыбачить!** Не выбрана приманка.\n"
 
             text = (
                 f"🎣 **РЫБАЛКА**\n\n"
@@ -409,7 +430,8 @@ def register_fishing_handlers(dp):
                 f"   🐟 Рыб за раз: {rod.get('fish_per_cast', 1)}\n"
                 f"🔧 Снасть: {tackle['emoji']} {tackle['name']}\n"
                 f"   💥 Шанс поломки: {int(tackle.get('break_chance', 0) * 100)}%\n"
-                f"🐛 Приманка: {bait_name}\n"
+                f"🐛 Приманка: {bait_name_display}\n"
+                f"{warning}"
                 f"🐟 Поймано рыб: {fishing.get('fish_caught', 0)}\n"
                 f"📦 Всего рыб: {fishing.get('total_fish', 0)}\n\n"
                 f"Выберите действие:"
@@ -452,6 +474,42 @@ def register_fishing_handlers(dp):
             rod = FISHING_RODS.get(rod_key, FISHING_RODS["basic"])
             tackle_key = fishing.get("tackle", "basic")
             bait_name = fishing.get("bait")
+
+            # ===== Проверка: снасть должна соответствовать удочке =====
+            # У каждой удочки есть своя "родная" снасть (ключи совпадают).
+            # Если снасть не подходит к текущей удочке - рыбачить нельзя.
+            if tackle_key != rod_key:
+                required_tackle = FISHING_TACKLE.get(rod_key, FISHING_TACKLE["basic"])
+                await callback.answer(
+                    f"⛔ Нельзя рыбачить!\n\n"
+                    f"🎣 {rod['name']} требует снасть «{required_tackle['emoji']} {required_tackle['name']}».\n"
+                    f"Смените снасть в Настройках/Магазине.",
+                    show_alert=True
+                )
+                return
+
+            # ===== Проверка: без приманки нельзя рыбачить (кроме бесплатной удочки) =====
+            if rod_key != "basic" and not bait_name:
+                await callback.answer(
+                    "⛔ Без приманки рыбачить нельзя!\n\n"
+                    "Выберите приманку в Настройках (Магазин → Приманки).",
+                    show_alert=True
+                )
+                return
+
+            # ===== Проверка: приманка должна подходить к текущей удочке =====
+            if bait_name:
+                bait_category = get_bait_category(bait_name)
+                if bait_category != rod_key:
+                    fishing["bait"] = None
+                    await save_fishing_data(user_id, fishing)
+                    await callback.answer(
+                        f"⛔ Эта приманка не подходит для «{rod['name']}»!\n\n"
+                        f"Нужна приманка категории «{rod['emoji']} {rod['name']}». "
+                        f"Приманка снята, выберите подходящую.",
+                        show_alert=True
+                    )
+                    return
 
             # Проверка снасти на поломку (5%)
             tackle = FISHING_TACKLE.get(tackle_key, FISHING_TACKLE["basic"])
@@ -1055,7 +1113,9 @@ def register_fishing_handlers(dp):
             for item in inventory:
                 if item.startswith("Приманка: "):
                     bait_name = item.replace("Приманка: ", "")
-                    bait_counts[bait_name] = bait_counts.get(bait_name, 0) + 1
+                    # Показываем только приманки, подходящие к текущей удочке
+                    if get_bait_category(bait_name) == rod_key:
+                        bait_counts[bait_name] = bait_counts.get(bait_name, 0) + 1
 
             unique_baits = list(bait_counts.keys())
 
@@ -1064,8 +1124,9 @@ def register_fishing_handlers(dp):
                 f"🎣 Удочка: {rod['emoji']} {rod['name']}\n"
                 f"🔧 Снасть: {tackle['emoji']} {tackle['name']}\n"
                 f"🐛 Текущая приманка: {current_bait}\n"
-                f"📦 Разных приманок: {len(unique_baits)}\n\n"
-                f"Выберите приманку для следующей рыбалки:"
+                f"📦 Подходящих приманок: {len(unique_baits)}\n\n"
+                f"Выберите приманку для следующей рыбалки "
+                f"(подходят только приманки категории «{rod['name']}»):"
             )
 
             keyboard = []
@@ -1079,7 +1140,14 @@ def register_fishing_handlers(dp):
                         callback_data=f"fsh_sel_bait_{idx}"
                     )])
             else:
-                text += "\n_У вас нет приманок. Купите их в магазине._"
+                if rod_key == "basic":
+                    text += "\n_У вас нет приманок. Купите их в магазине._"
+                else:
+                    text += (
+                        f"\n_У вас нет приманок категории «{rod['name']}». "
+                        f"Без подходящей приманки рыбачить этой удочкой нельзя! "
+                        f"Купите их в магазине._"
+                    )
 
             if fishing.get("bait"):
                 keyboard.append([InlineKeyboardButton(
@@ -1113,13 +1181,18 @@ def register_fishing_handlers(dp):
             bait_index = int(callback.data.replace("fsh_sel_bait_", ""))
             user_id = str(callback.from_user.id)
 
+            fishing = await get_fishing_data(user_id)
+            rod_key = fishing.get("rod", "basic")
+
             inventory = await get_fishing_inventory(user_id)
 
             bait_counts = {}
             for item in inventory:
                 if item.startswith("Приманка: "):
                     bait_name = item.replace("Приманка: ", "")
-                    bait_counts[bait_name] = bait_counts.get(bait_name, 0) + 1
+                    # Та же фильтрация, что и в fishing_settings, чтобы индексы совпадали
+                    if get_bait_category(bait_name) == rod_key:
+                        bait_counts[bait_name] = bait_counts.get(bait_name, 0) + 1
 
             unique_baits = list(bait_counts.keys())
 
@@ -1129,7 +1202,6 @@ def register_fishing_handlers(dp):
 
             bait_name = unique_baits[bait_index]
 
-            fishing = await get_fishing_data(user_id)
             fishing["bait"] = bait_name
             await save_fishing_data(user_id, fishing)
 
@@ -1229,10 +1301,14 @@ def register_fishing_handlers(dp):
                 "4. 🔮 Редкая (65%) - 50 рыб, 150M₽, 1 рыба/раз\n"
                 "5. 🎣 Базовая (55%) - бесплатно, 1 рыба/раз\n\n"
                 "**🔧 СНАСТИ:**\n"
-                "• Дают доступ к удочкам\n"
+                "• Каждой удочке нужна своя снасть того же типа "
+                "(например, Галактической удочке - только Галактическая снасть)!\n"
+                "• Если снасть не подходит к удочке - рыбачить нельзя ⛔\n"
                 "• Есть 5% шанс поломки при рыбалке!\n"
                 "• При поломке нужно покупать новую\n\n"
                 "**🐛 ПРИМАНКИ (тратятся 1 раз):**\n"
+                "• Для каждой удочки своя категория приманок!\n"
+                "• Без приманки нельзя рыбачить (кроме Базовой удочки) ⛔\n"
                 "• Увеличивают шанс редкой рыбы\n"
                 "• Выбираются в настройках\n"
                 "• Покупаются в магазине\n\n"
