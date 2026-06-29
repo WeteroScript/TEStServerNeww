@@ -134,8 +134,8 @@ ALL_RESOURCES = MINE_RESOURCES + FISH_RESOURCES + AUTO_MINE_RESOURCES
 BUSINESS_CONFIG = {
     "auto_mine": {
         "name": "Авто-Шахта",
-        "price": 30000000000,
-        "max_owners": 2,
+        "price": 50000000000,
+        "max_owners": 4,
         "emoji": "⛏️",
         "profit_type": "resources",
         "resources": [
@@ -151,7 +151,7 @@ BUSINESS_CONFIG = {
             {"name": "Шпинель", "chance": 0.30}
         ],
         "min_resources": 1,
-        "max_resources": 3,
+        "max_resources": 4,
         "cooldown": 5
     },
     "tech_center": {
