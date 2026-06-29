@@ -942,7 +942,7 @@ def register_user_handlers(dp):
             await state.clear()
 
             # Отправляем сообщение с информацией
-            await callback.message.edit_text(
+            sent_message = await callback.message.edit_text(
                 f"💱 **КОНВЕРТЕР BRcoins → РУБЛИ**\n\n"
                 f"💰 Курс: 1 BRcoin = {BRCOIN_TO_RUB_RATE:,}₽\n"
                 f"💎 Ваш баланс BRcoins: {user_brcoins}\n"
@@ -956,7 +956,13 @@ def register_user_handlers(dp):
                 ]),
                 parse_mode="Markdown"
             )
-            
+
+            # Запоминаем сообщение-меню, чтобы корректно "закрыть" его после конвертации
+            await state.update_data(
+                convert_menu_chat_id=callback.message.chat.id,
+                convert_menu_message_id=callback.message.message_id
+            )
+
             # Устанавливаем состояние
             await state.set_state(DonateStates.waiting_for_brcoin_convert)
             logger.info(f"✅ Меню конвертации открыто для пользователя {user_id}")
@@ -1020,6 +1026,11 @@ def register_user_handlers(dp):
             user = users.get(user_id, get_default_user())
             user_brcoins = user.get("brcoins", 0)
 
+            # Достаём данные о сообщении-меню (чтобы закрыть его после конвертации)
+            state_data = await state.get_data()
+            menu_chat_id = state_data.get("convert_menu_chat_id")
+            menu_message_id = state_data.get("convert_menu_message_id")
+
             # Проверяем, достаточно ли BRcoins
             if amount > user_brcoins:
                 await message.answer(
@@ -1049,6 +1060,13 @@ def register_user_handlers(dp):
 
             # Очищаем состояние
             await state.clear()
+
+            # Закрываем (удаляем) исходное сообщение-меню конвертера, чтобы оно не "висело" открытым
+            if menu_chat_id and menu_message_id:
+                try:
+                    await bot.delete_message(chat_id=menu_chat_id, message_id=menu_message_id)
+                except Exception as close_err:
+                    logger.warning(f"Не удалось закрыть меню конвертера: {close_err}")
 
             logger.info(
                 f"✅ Конвертация BRcoins выполнена: "
@@ -1080,6 +1098,14 @@ def register_user_handlers(dp):
             
         except Exception as e:
             logger.error(f"❌ Критическая ошибка конвертации: {e}", exc_info=True)
+            try:
+                state_data = await state.get_data()
+                menu_chat_id = state_data.get("convert_menu_chat_id")
+                menu_message_id = state_data.get("convert_menu_message_id")
+                if menu_chat_id and menu_message_id:
+                    await bot.delete_message(chat_id=menu_chat_id, message_id=menu_message_id)
+            except Exception:
+                pass
             await state.clear()
             await message.answer(
                 "⚠️ Произошла ошибка при конвертации!\n"
