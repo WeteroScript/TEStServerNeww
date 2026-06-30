@@ -19,3 +19,6 @@ class CasinoStates(StatesGroup):
 
 class DonateStates(StatesGroup):
     waiting_for_brcoin_convert = State()
+
+class FishingStates(StatesGroup):
+    waiting_for_bait_quantity = State()
