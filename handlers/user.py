@@ -1084,7 +1084,7 @@ def register_user_handlers(dp):
                 f"💎 BRcoins: {user['brcoins']}",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="💱 Конвертировать ещё", callback_data="convert_brcoins")],
-                    [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+                    [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_main")]
                 ]),
                 parse_mode="Markdown"
             )
@@ -1111,7 +1111,7 @@ def register_user_handlers(dp):
                 "⚠️ Произошла ошибка при конвертации!\n"
                 "Пожалуйста, попробуйте позже.",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+                    [InlineKeyboardButton(text="🔙 В главное меню", callback_data="back_main")]
                 ])
             )
 
